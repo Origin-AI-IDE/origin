@@ -1,4 +1,5 @@
 import { createContext, useContext, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { XCircle } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -59,17 +60,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      {toast && (
+      {toast && createPortal(
         <div
           style={{
             position: 'fixed',
             bottom: 32,
             left: '50%',
             transform: 'translateX(-50%)',
-            // `#root > *` in index.css forces height:100% on every direct child
-            // of #root — and the toast is one. Override it so the pill sizes to
-            // its content instead of stretching to the full window height.
-            height: 'auto',
             minWidth: 280,
             maxWidth: 480,
             zIndex: 9999,
@@ -117,7 +114,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             <XCircle size={15} />
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </ToastContext.Provider>
   );
