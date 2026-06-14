@@ -66,6 +66,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             bottom: 32,
             left: '50%',
             transform: 'translateX(-50%)',
+            // `#root > *` in index.css forces height:100% on every direct child
+            // of #root — and the toast is one. Override it so the pill sizes to
+            // its content instead of stretching to the full window height.
+            height: 'auto',
             minWidth: 280,
             maxWidth: 480,
             zIndex: 9999,
