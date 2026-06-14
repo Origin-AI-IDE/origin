@@ -1,12 +1,19 @@
 import { useRef, useState } from 'react';
-import { X, File } from 'lucide-react';
+import { X, File, GitCompare } from 'lucide-react';
 import { fileColor } from '../../lib/fileColors';
 
 export interface Tab {
-  path: string;
+  path: string;   // for ai-diff tabs: "__diff__<approvalId>"
   name: string;
   isDirty: boolean;
   isUntitled?: boolean;
+  kind?: 'file' | 'ai-diff';
+  // ai-diff only
+  filePath?: string;
+  originalContent?: string;
+  proposedContent?: string;
+  approve?: () => void;
+  reject?: () => void;
 }
 
 interface Props {
@@ -51,10 +58,12 @@ function TabItem({ tab, active, onSelect, onClose }: { tab: Tab; active: boolean
         transition: 'background 0.1s',
       }}
     >
-      {/* File icon or dirty dot */}
-      {tab.isDirty
-        ? <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--origin-fg-muted)', flexShrink: 0 }} />
-        : <File size={13} style={{ flexShrink: 0, color: fileColor(tab.name) }} />
+      {/* Icon: diff badge, dirty dot, or file icon */}
+      {tab.kind === 'ai-diff'
+        ? <GitCompare size={13} style={{ flexShrink: 0, color: 'rgba(46,160,67,0.9)' }} />
+        : tab.isDirty
+          ? <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--origin-fg-muted)', flexShrink: 0 }} />
+          : <File size={13} style={{ flexShrink: 0, color: fileColor(tab.name) }} />
       }
 
       {/* File name */}

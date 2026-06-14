@@ -2891,7 +2891,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "origin-rust"
+name = "origin"
 version = "0.1.0"
 dependencies = [
  "keyring",

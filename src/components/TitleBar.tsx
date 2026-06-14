@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Minus, Square, X, PanelLeft, PanelBottom, PanelRight } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Tooltip } from "./ui/Tooltip";
@@ -21,8 +22,36 @@ interface TitleBarProps {
   onNewFile: () => void;
   onNewWindow: () => void;
   onOpenPalette: () => void;
-  gitBranch:  string | null;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
+  gitBranch: string | null;
   dirtyCount: number;
+  // File actions
+  onSave?: () => void;
+  onSaveAs?: () => void;
+  onSaveAll?: () => void;
+  onCloseEditor?: () => void;
+  onCloseFolder?: () => void;
+  hasActiveTab?: boolean;
+  hasFolderOpen?: boolean;
+  // Edit actions
+  onEditorUndo?: () => void;
+  onEditorRedo?: () => void;
+  onEditorCut?: () => void;
+  onEditorCopy?: () => void;
+  onEditorPaste?: () => void;
+  onEditorSelectAll?: () => void;
+  onEditorFind?: () => void;
+  // Zoom
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onZoomReset?: () => void;
+  // Terminal
+  onNewTerminalTab?: () => void;
+  onClearTerminal?: () => void;
+  onKillTerminal?: () => void;
+  // Help
+  onAbout?: () => void;
 }
 
 function IconBtn({
@@ -77,11 +106,6 @@ function MenuButton({
     <button
       ref={anchorRef}
       onClick={onClick}
-      className="text-xs px-2 py-1 rounded transition-colors"
-      style={{
-        color: isOpen ? "var(--origin-fg-default)" : "var(--origin-fg-muted)",
-        backgroundColor: isOpen ? "var(--origin-bg-hover)" : "transparent",
-      }}
       onMouseEnter={(e) => {
         e.currentTarget.style.color = "var(--origin-fg-default)";
         e.currentTarget.style.backgroundColor = "var(--origin-bg-hover)";
@@ -91,6 +115,11 @@ function MenuButton({
           e.currentTarget.style.color = "var(--origin-fg-muted)";
           e.currentTarget.style.backgroundColor = "transparent";
         }
+      }}
+      className="text-xs px-2 py-1 rounded transition-colors"
+      style={{
+        color: isOpen ? "var(--origin-fg-default)" : "var(--origin-fg-muted)",
+        backgroundColor: isOpen ? "var(--origin-bg-hover)" : "transparent",
       }}
     >
       {label}
@@ -105,7 +134,14 @@ export default function TitleBar({
   aiPanelOpen, onToggleAiPanel,
   onOpenFolder, onOpenFile, onNewFile, onNewWindow,
   onOpenPalette,
+  isFullscreen, onToggleFullscreen,
   gitBranch, dirtyCount,
+  onSave, onSaveAs, onSaveAll, onCloseEditor, onCloseFolder,
+  hasActiveTab, hasFolderOpen,
+  onEditorUndo, onEditorRedo, onEditorCut, onEditorCopy, onEditorPaste, onEditorSelectAll, onEditorFind,
+  onZoomIn, onZoomOut, onZoomReset,
+  onNewTerminalTab, onClearTerminal, onKillTerminal,
+  onAbout,
 }: TitleBarProps) {
   const { theme } = useTheme();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -124,30 +160,29 @@ export default function TitleBar({
     { type: 'separator' },
     { type: 'item', label: 'Open Folder…', shortcut: 'Ctrl+K Ctrl+O', onClick: onOpenFolder },
     { type: 'item', label: 'Open File…',   shortcut: 'Ctrl+O',        onClick: onOpenFile },
-    { type: 'item', label: 'Open Recent',  submenu: true,              disabled: true },
     { type: 'separator' },
-    { type: 'item', label: 'Save',         shortcut: 'Ctrl+S',        disabled: true },
-    { type: 'item', label: 'Save As…',     shortcut: 'Ctrl+Shift+S',  disabled: true },
-    { type: 'item', label: 'Save All',     shortcut: 'Ctrl+K S',      disabled: true },
+    { type: 'item', label: 'Save',         shortcut: 'Ctrl+S',        disabled: !hasActiveTab, onClick: () => { close(); onSave?.(); } },
+    { type: 'item', label: 'Save As…',     shortcut: 'Ctrl+Shift+S',  disabled: !hasActiveTab, onClick: () => { close(); onSaveAs?.(); } },
+    { type: 'item', label: 'Save All',     shortcut: 'Ctrl+K S',      disabled: dirtyCount === 0, onClick: () => { close(); onSaveAll?.(); } },
     { type: 'separator' },
-    { type: 'item', label: 'Close Editor', shortcut: 'Ctrl+W',        disabled: true },
-    { type: 'item', label: 'Close Folder',                             disabled: true },
+    { type: 'item', label: 'Close Editor', shortcut: 'Ctrl+W',        disabled: !hasActiveTab, onClick: () => { close(); onCloseEditor?.(); } },
+    { type: 'item', label: 'Close Folder',                             disabled: !hasFolderOpen, onClick: () => { close(); onCloseFolder?.(); } },
     { type: 'separator' },
     { type: 'item', label: 'Exit',         shortcut: 'Alt+F4',        onClick: () => win.close() },
   ];
 
   const editEntries: MenuEntry[] = [
-    { type: 'item', label: 'Undo',       shortcut: 'Ctrl+Z',   disabled: true },
-    { type: 'item', label: 'Redo',       shortcut: 'Ctrl+Y',   disabled: true },
+    { type: 'item', label: 'Undo',       shortcut: 'Ctrl+Z',  disabled: !hasActiveTab, onClick: () => { close(); onEditorUndo?.(); } },
+    { type: 'item', label: 'Redo',       shortcut: 'Ctrl+Y',  disabled: !hasActiveTab, onClick: () => { close(); onEditorRedo?.(); } },
     { type: 'separator' },
-    { type: 'item', label: 'Cut',        shortcut: 'Ctrl+X',   disabled: true },
-    { type: 'item', label: 'Copy',       shortcut: 'Ctrl+C',   disabled: true },
-    { type: 'item', label: 'Paste',      shortcut: 'Ctrl+V',   disabled: true },
+    { type: 'item', label: 'Cut',        shortcut: 'Ctrl+X',  disabled: !hasActiveTab, onClick: () => { close(); onEditorCut?.(); } },
+    { type: 'item', label: 'Copy',       shortcut: 'Ctrl+C',  disabled: !hasActiveTab, onClick: () => { close(); onEditorCopy?.(); } },
+    { type: 'item', label: 'Paste',      shortcut: 'Ctrl+V',  disabled: !hasActiveTab, onClick: () => { close(); onEditorPaste?.(); } },
     { type: 'separator' },
-    { type: 'item', label: 'Select All', shortcut: 'Ctrl+A',   disabled: true },
+    { type: 'item', label: 'Select All', shortcut: 'Ctrl+A',  disabled: !hasActiveTab, onClick: () => { close(); onEditorSelectAll?.(); } },
     { type: 'separator' },
-    { type: 'item', label: 'Find',       shortcut: 'Ctrl+F',   disabled: true },
-    { type: 'item', label: 'Replace',    shortcut: 'Ctrl+H',   disabled: true },
+    { type: 'item', label: 'Find',       shortcut: 'Ctrl+F',  disabled: !hasActiveTab, onClick: () => { close(); onEditorFind?.(); } },
+    { type: 'item', label: 'Replace',    shortcut: 'Ctrl+H',  disabled: !hasActiveTab, onClick: () => { close(); onEditorFind?.(); } },
   ];
 
   const viewEntries: MenuEntry[] = [
@@ -155,24 +190,33 @@ export default function TitleBar({
     { type: 'separator' },
     { type: 'item', label: sidebarOpen ? 'Hide Sidebar' : 'Show Sidebar', onClick: () => { close(); onToggleSidebar(); } },
     { type: 'item', label: terminalOpen ? 'Hide Terminal' : 'Show Terminal', shortcut: 'Ctrl+`', onClick: () => { close(); onToggleTerminal(); } },
+    { type: 'item', label: isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen', shortcut: 'F11', onClick: () => { close(); onToggleFullscreen(); } },
     { type: 'separator' },
-    { type: 'item', label: 'Zoom In',    shortcut: 'Ctrl+=', disabled: true },
-    { type: 'item', label: 'Zoom Out',   shortcut: 'Ctrl+-', disabled: true },
-    { type: 'item', label: 'Reset Zoom', shortcut: 'Ctrl+0', disabled: true },
+    { type: 'item', label: 'Zoom In',    shortcut: 'Ctrl+=', onClick: () => { close(); onZoomIn?.(); } },
+    { type: 'item', label: 'Zoom Out',   shortcut: 'Ctrl+-', onClick: () => { close(); onZoomOut?.(); } },
+    { type: 'item', label: 'Reset Zoom', shortcut: 'Ctrl+0', onClick: () => { close(); onZoomReset?.(); } },
   ];
 
   const terminalEntries: MenuEntry[] = [
     { type: 'item', label: terminalOpen ? 'Hide Terminal' : 'Show Terminal', shortcut: 'Ctrl+`', onClick: () => { close(); onToggleTerminal(); } },
     { type: 'separator' },
-    { type: 'item', label: 'New Terminal Tab', disabled: true },
-    { type: 'item', label: 'Clear Terminal',   disabled: true },
-    { type: 'item', label: 'Kill Terminal',    disabled: true },
+    { type: 'item', label: 'New Terminal Tab', onClick: () => { close(); onNewTerminalTab?.(); } },
+    { type: 'item', label: 'Clear Terminal',   disabled: !terminalOpen, onClick: () => { close(); onClearTerminal?.(); } },
+    { type: 'item', label: 'Kill Terminal',    disabled: !terminalOpen, onClick: () => { close(); onKillTerminal?.(); } },
   ];
 
+  const repo = 'https://github.com/Origin-AI-IDE/origin';
   const helpEntries: MenuEntry[] = [
     { type: 'item', label: 'Keyboard Shortcuts', shortcut: 'Ctrl+P', onClick: () => { close(); onOpenPalette(); } },
     { type: 'separator' },
-    { type: 'item', label: 'About Origin', disabled: true },
+    { type: 'item', label: 'Documentation',    onClick: () => { close(); openUrl(`${repo}#readme`); } },
+    { type: 'item', label: 'Report an Issue',  onClick: () => { close(); openUrl(`${repo}/issues/new`); } },
+    { type: 'item', label: 'View on GitHub',   onClick: () => { close(); openUrl(repo); } },
+    { type: 'separator' },
+    { type: 'item', label: 'View License',     onClick: () => { close(); openUrl(`${repo}/blob/main/LICENSE`); } },
+    { type: 'item', label: 'Release Notes',    onClick: () => { close(); openUrl(`${repo}/releases`); } },
+    { type: 'separator' },
+    { type: 'item', label: 'About Origin',     onClick: () => { close(); onAbout?.(); } },
   ];
 
   const menus: Array<{ id: string; label: string; ref: React.RefObject<HTMLButtonElement | null>; entries: MenuEntry[] }> = [
@@ -205,7 +249,7 @@ export default function TitleBar({
         />
 
         {menus.map(({ id, label, ref, entries }) => (
-          <span key={id}>
+          <span key={id} onMouseEnter={() => setOpenMenu(id)}>
             <MenuButton
               label={label}
               anchorRef={ref}

@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import TitleBar from "./components/TitleBar";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./components/onboarding/Onboarding";
 import EditorEmptyState from "./components/editor/EditorEmptyState";
 import TabBar, { type Tab } from "./components/editor/TabBar";
-import Editor, { type EditorHandle, type EditorContext, type DiffHunk } from "./components/editor/Editor";
+import Editor, { type EditorHandle, type EditorContext } from "./components/editor/Editor";
+import AiDiffPane, { type AiDiffTabData } from "./components/editor/AiDiffPane";
 import StatusBar from "./components/StatusBar";
-import TerminalPanel from "./components/terminal/TerminalPanel";
+import TerminalPanel, { type TerminalPanelHandle } from "./components/terminal/TerminalPanel";
 import CommandPalette from "./components/palette/CommandPalette";
 import AiPanel from "./components/ai/AiPanel";
 import SettingsPanel from "./components/settings/SettingsPanel";
@@ -17,157 +19,6 @@ import { readFile, writeFile } from "./lib/fs";
 import { getBranch } from "./lib/git";
 import { languageLabel } from "./components/editor/languageSupport";
 import { useWorkspace } from "./context/WorkspaceContext";
-import { useToast } from "./components/ui/Toast";
-import { patchApplySnippet, patchReplaceRegion, type PatchResult } from "./lib/patch";
-
-// Feature flag: route applies through the Rust patch-engine. Set to false to fall
-// back to the legacy TypeScript merge path (one-line rollback during migration).
-const USE_PATCH_ENGINE = false;
-
-// Matches a complete SEARCH/REPLACE block as produced by the LLM and passed
-// through extractFirstCompleteBlock / SearchReplaceBlock.onApply.
-const SR_BLOCK_RE = /^<<<<<<< ORIGINAL\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> UPDATED$/;
-
-/**
- * Merges an LLM snippet back into the original file.
- *
- * Two strategies, chosen by the shape of the snippet:
- *
- *  1. Prefix + suffix anchoring — match shared lines at BOTH the start and the
- *     end of the snippet relative to the original; the region in between is the
- *     change. This is correct for full-file rewrites/redesigns (where the LLM
- *     ignores "snippet only" and returns the whole file), top/bottom additions,
- *     and brand-new files. When neither end matches, the snippet IS the new file.
- *
- *  2. Interior anchor — find the longest consecutive run of snippet lines that
- *     appears somewhere inside the original, and splice the snippet in there.
- *     This is correct for small targeted edits that quote a few context lines
- *     from the MIDDLE of the file.
- *
- * The previous implementation used only a greedy prefix-anchored run, which on a
- * full-file rewrite could match the whole snippet against the file's head and
- * then `slice()` away the original body — destroying everything that wasn't in
- * the snippet and leaving only the snippet in the editor. The hybrid below never
- * discards original content unless that content was genuinely replaced by the
- * snippet's own context.
- *
- * Invariant: never destroy content that the snippet did not account for. When in
- * doubt, prefer inserting (interior anchor) or whole-file replacement over a
- * lossy slice.
- */
-function applySnippetToFile(original: string, snippet: string): string {
-  const origLines    = original.split('\n');
-  const snippetLines = snippet.split('\n');
-
-  // ── Strategy 1: prefix + suffix (handles full rewrites & top/bottom edits) ──
-  let prefixLen = 0;
-  while (
-    prefixLen < origLines.length &&
-    prefixLen < snippetLines.length &&
-    origLines[prefixLen].trimEnd() === snippetLines[prefixLen].trimEnd()
-  ) prefixLen++;
-
-  let suffixLen = 0;
-  while (
-    suffixLen < origLines.length - prefixLen &&
-    suffixLen < snippetLines.length - prefixLen &&
-    origLines[origLines.length - 1 - suffixLen].trimEnd() ===
-      snippetLines[snippetLines.length - 1 - suffixLen].trimEnd()
-  ) suffixLen++;
-
-  // ── Strategy 2: greedy interior anchor (handles small targeted edits) ───────
-  let bestStart    = -1;
-  let bestMatchLen = 0;
-  for (let i = 0; i < origLines.length; i++) {
-    let k = 0;
-    while (
-      k < snippetLines.length &&
-      i + k < origLines.length &&
-      origLines[i + k].trimEnd() === snippetLines[k].trimEnd()
-    ) k++;
-    if (k > bestMatchLen) {
-      bestMatchLen = k;
-      bestStart    = i;
-    }
-  }
-
-  // ── Choose strategy ─────────────────────────────────────────────────────────
-  const origIsEmpty = original.trim() === '';
-
-  // Anchor coverage: what fraction of the snippet's lines are context (matched
-  // in the original). High coverage means this is a targeted edit regardless of
-  // whether the snippet is large relative to the file — the interior anchor wins.
-  const anchorCoverage     = snippetLines.length > 0 ? bestMatchLen / snippetLines.length : 0;
-  const anchorLine         = bestStart >= 0 ? snippetLines[0].trim() : '';
-  const anchorIsTrivial    = anchorLine.length <= 1;
-  const goodInteriorAnchor = bestMatchLen >= 2 || (bestMatchLen === 1 && !anchorIsTrivial);
-  // ≥50% of snippet is context → this is definitely a targeted edit, not a rewrite
-  const strongAnchor       = anchorCoverage >= 0.5;
-  // When the entire snippet matches a prefix of the original (anchor covers 100%
-  // and starts at 0), the interior splice would re-append the deleted tail.
-  // Let prefix+suffix handle it — it correctly drops the lines after the snippet.
-  const snippetIsPurePrefix = bestStart === 0 && bestMatchLen === snippetLines.length;
-
-  if (!origIsEmpty && bestStart >= 0 && goodInteriorAnchor && strongAnchor && !snippetIsPurePrefix) {
-    // Splice the snippet over its matched context, preserving everything outside.
-    return [
-      ...origLines.slice(0, bestStart),
-      ...snippetLines,
-      ...origLines.slice(bestStart + bestMatchLen),
-    ].join('\n');
-  }
-
-  // Prefix+suffix path — handles full rewrites and top/bottom additions.
-  // No shared context at either end → snippet IS the new file (only when the
-  // original is empty or the snippet has no anchor at all).
-  if (prefixLen === 0 && suffixLen === 0) {
-    if (origIsEmpty || bestStart < 0) {
-      // Empty file or zero anchor: treat snippet as full replacement.
-      const trimmed = original.trimEnd();
-      return origIsEmpty
-        ? snippet
-        : trimmed + (trimmed ? '\n' : '') + snippet; // append as last resort
-    }
-    // Has a weak (trivial) anchor — splice there rather than wipe the file.
-    return [
-      ...origLines.slice(0, bestStart),
-      ...snippetLines,
-      ...origLines.slice(bestStart + bestMatchLen),
-    ].join('\n');
-  }
-
-  return [
-    ...origLines.slice(0, prefixLen),
-    ...snippetLines.slice(prefixLen, snippetLines.length - suffixLen),
-    ...origLines.slice(origLines.length - suffixLen),
-  ].join('\n');
-}
-
-// Applies a SEARCH/REPLACE block (exact string match with whitespace-trim
-// fallback). Returns the patched file content, or null when ORIGINAL is not
-// found — leaving the file untouched is the correct failure mode.
-function applySearchReplace(fileContent: string, original: string, updated: string): string | null {
-  // Exact match (fast path)
-  const idx = fileContent.indexOf(original);
-  if (idx !== -1) {
-    return fileContent.slice(0, idx) + updated + fileContent.slice(idx + original.length);
-  }
-  // Whitespace-trimmed fallback: strip trailing spaces per line, then retry.
-  const trimLines = (s: string) => s.split('\n').map(l => l.trimEnd()).join('\n');
-  const normFile = trimLines(fileContent);
-  const normOrig = trimLines(original);
-  const normIdx = normFile.indexOf(normOrig);
-  if (normIdx === -1) return null;
-  // Map the normalised index back to the original file's line range.
-  const linesBefore = normFile.slice(0, normIdx).split('\n').length - 1;
-  const origFileLines = fileContent.split('\n');
-  const matchLineCount = original.split('\n').length;
-  return [
-    ...origFileLines.slice(0, linesBefore),
-    ...updated.split('\n'),
-    ...origFileLines.slice(linesBefore + matchLineCount),
-  ].join('\n');
-}
 
 function cache(key: string) {
   return {
@@ -182,7 +33,6 @@ const cSidebar    = cache('origin-sidebar-open');
 
 function App() {
   const { folderPath, setFolderPath } = useWorkspace();
-  const { showToast } = useToast();
   const [onboardingDone, setOnboardingDone] = useState(
     () => cOnboarding.get() === 'true'
   );
@@ -192,6 +42,8 @@ function App() {
   const untitledCount = useRef(0);
   const handleSaveRef = useRef<(path: string) => Promise<void>>(() => Promise.resolve());
   const editorRef = useRef<EditorHandle>(null);
+  const terminalRef = useRef<TerminalPanelHandle>(null);
+  const [zoom, setZoom] = useState(1.0);
   // Always-current snapshots of editor state. handleApplyCode is invoked from
   // the AI stream's token callback (auto-apply) — at which point App has NOT
   // re-rendered, so reading these from the render closure would see a stale
@@ -214,7 +66,7 @@ function App() {
   );
 
   const [jumpRequest, setJumpRequest] = useState<{ path: string; line: number; col: number; key: number } | null>(null);
-  const [pendingDiff, setPendingDiff] = useState<{ code: string; targetPath: string; hunk?: DiffHunk } | null>(null);
+  const [fileTreeVersion, setFileTreeVersion] = useState(0);
 
   const [terminalOpen, setTerminalOpen] = useState(
     () => localStorage.getItem('origin-terminal-open') === 'true'
@@ -275,55 +127,6 @@ function App() {
   }, [aiPanelOpen]);
 
 
-  // Routes a PatchResult into the editor (Applied) or surfaces a notice otherwise.
-  function handlePatchResult(result: PatchResult) {
-    if (result.outcome === 'Applied') {
-      editorRef.current?.showResolvedDiff(result);
-      return;
-    }
-    if (result.outcome === 'NoOp') {
-      showToast('Already applied — no changes to make.', 'info');
-      return;
-    }
-    showToast(result.message || `Could not apply snippet (${result.outcome}).`, 'error');
-  }
-
-  // Apply pending diff once the target file is active and its content is loaded
-  useEffect(() => {
-    if (!pendingDiff) return;
-    if (activeTab !== pendingDiff.targetPath) return;
-    if (fileContents[activeTab] === undefined) return;
-    if (!editorRef.current) return;
-    const { code, hunk } = pendingDiff;
-    const original = fileContents[activeTab];
-    setPendingDiff(null);
-
-    // SEARCH/REPLACE path
-    const srMatch = SR_BLOCK_RE.exec(code);
-    if (srMatch) {
-      const result = applySearchReplace(original, srMatch[1], srMatch[2]);
-      if (result === null) {
-        showToast('Original text not found in file — no changes made.', 'error');
-        return;
-      }
-      editorRef.current.showDiff(result);
-      return;
-    }
-
-    // Legacy paths
-    if (USE_PATCH_ENGINE) {
-      const language = languageLabel(activeTab);
-      const promise = hunk
-        ? patchReplaceRegion(original, code, hunk.fromLine, hunk.toLine)
-        : patchApplySnippet(original, code, activeTab, language);
-      promise.then(handlePatchResult).catch(err => showToast(String(err), 'error'));
-      return;
-    }
-
-    const merged = hunk ? code : applySnippetToFile(original, code);
-    editorRef.current.showDiff(merged, hunk);
-  }, [pendingDiff, activeTab, fileContents]);
-
   // Read git branch whenever the workspace folder changes
   useEffect(() => {
     if (!folderPath) { setGitBranch(null); return; }
@@ -334,6 +137,7 @@ function App() {
   useEffect(() => {
     if (!activeTab || fileContents[activeTab] !== undefined) return;
     if (activeTab.startsWith('__untitled__')) return;
+    if (activeTab.startsWith('__diff__')) return; // ai-diff tab — content is in the tab object
     readFile(activeTab)
       .then(content => setFileContents(prev => ({ ...prev, [activeTab]: content })))
       .catch(() => setFileContents(prev => ({ ...prev, [activeTab]: '' })));
@@ -376,6 +180,67 @@ function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [activeTab]);
+
+  // Notify browser on any native window resize (fullscreen, maximize, etc.)
+  // so CodeMirror and xterm FitAddon re-measure themselves.
+  useEffect(() => {
+    const unlisteners: Array<() => void> = [];
+    let raf = 0;
+
+    // The actual viewport fill is handled in CSS via `position: fixed; inset: 0`
+    // on html/body/#root, so we no longer set pixel heights here (that math was
+    // fragile: Tauri's PhysicalSize / devicePixelRatio doesn't match WebView2's
+    // internal CSS-pixel rounding on fractional-DPR Windows displays, and the
+    // event doesn't reliably fire on programmatic setFullscreen). All this hook
+    // does now is poke child widgets (CodeMirror, xterm FitAddon) to re-measure
+    // after the window geometry settles.
+    const notify = () => {
+      cancelAnimationFrame(raf);
+      // Two frames: let WebView2 commit the new layout before widgets measure.
+      raf = requestAnimationFrame(() => {
+        requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+      });
+    };
+
+    const win = getCurrentWindow();
+    // Tauri's high-level helper.
+    win.onResized(notify).then(fn => unlisteners.push(fn));
+    // Raw event as a fallback — fires for programmatic fullscreen cases where
+    // the helper above can stay quiet on WebView2.
+    win.listen('tauri://resize', notify).then(fn => unlisteners.push(fn));
+
+    // visualViewport is the most reliable in-page signal that the CSS viewport
+    // actually changed (it updates even when the Tauri events don't).
+    window.visualViewport?.addEventListener('resize', notify);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.visualViewport?.removeEventListener('resize', notify);
+      unlisteners.forEach(fn => fn());
+    };
+  }, []);
+
+  // F11 — toggle fullscreen
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const handleToggleFullscreen = () => {
+    const next = !isFullscreen;
+    getCurrentWindow().setFullscreen(next);
+    setIsFullscreen(next);
+  };
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'F11') {
+        e.preventDefault();
+        setIsFullscreen(v => {
+          const next = !v;
+          getCurrentWindow().setFullscreen(next);
+          return next;
+        });
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Ctrl+` — toggle terminal panel
   useEffect(() => {
@@ -474,57 +339,49 @@ function App() {
     });
   }
 
-  async function handleApplyCode(code: string, filePath?: string, ctx?: EditorContext) {
-    // Read live editor state through refs — auto-apply calls this from the AI
-    // stream callback while App has not re-rendered, so the render-closure
-    // values would be stale (see activeTabRef / fileContentsRef above).
+  function handleApplyCode(code: string, filePath?: string, _ctx?: EditorContext) {
     const currentActiveTab = activeTabRef.current;
     const currentFileContents = fileContentsRef.current;
     const targetPath = filePath ?? currentActiveTab;
     if (!targetPath) return;
 
-    // ── SEARCH/REPLACE path (new format) ────────────────────────────────────
-    const srMatch = SR_BLOCK_RE.exec(code);
-    if (srMatch) {
-      const [, origText, updatedText] = srMatch;
-      if (targetPath === currentActiveTab && currentFileContents[targetPath] !== undefined && editorRef.current) {
-        const result = applySearchReplace(currentFileContents[targetPath], origText, updatedText);
-        if (result === null) {
-          showToast('Original text not found in file — no changes made.', 'error');
-          return;
-        }
-        editorRef.current.showDiff(result);
-        return;
-      }
-      openTab(targetPath);
-      setPendingDiff({ code, targetPath });
-      return;
-    }
-
-    // ── Legacy snippet path ──────────────────────────────────────────────────
-    const hunk: DiffHunk | undefined = ctx?.type === 'selection'
-      ? { fromLine: ctx.startLine, toLine: ctx.endLine }
-      : undefined;
-    if (targetPath === currentActiveTab && currentFileContents[targetPath] !== undefined && editorRef.current) {
-      const original = currentFileContents[targetPath];
-      if (USE_PATCH_ENGINE) {
-        try {
-          const language = languageLabel(targetPath);
-          const result = hunk
-            ? await patchReplaceRegion(original, code, hunk.fromLine, hunk.toLine)
-            : await patchApplySnippet(original, code, targetPath, language);
-          handlePatchResult(result);
-        } catch (err) {
-          showToast(String(err), 'error');
-        }
-        return;
-      }
-      const merged = hunk ? code : applySnippetToFile(original, code);
-      editorRef.current.showDiff(merged, hunk);
-      return;
-    }
     openTab(targetPath);
-    setPendingDiff({ code, targetPath, hunk });
+    // Show diff inline only when the file is already the active tab
+    if (editorRef.current && targetPath === currentActiveTab) {
+      editorRef.current.showDiff(code, currentFileContents[targetPath]);
+    }
+  }
+
+  function openAiDiffTab(data: {
+    approvalId: string;
+    filePath: string;
+    proposedContent: string;
+    originalContent: string;
+    approve: () => void;
+    reject: () => void;
+  }) {
+    const tabPath = `__diff__${data.approvalId}`;
+    const fileName = data.filePath.split(/[\\/]/).filter(Boolean).pop() ?? data.filePath;
+    // Wrap approve so file tree refreshes after AI creates/modifies a file
+    const approveAndRefresh = () => {
+      data.approve();
+      setFileTreeVersion(v => v + 1);
+    };
+    setTabs(prev => {
+      if (prev.find(t => t.path === tabPath)) return prev;
+      return [...prev, {
+        path: tabPath,
+        name: `${fileName} (diff)`,
+        isDirty: false,
+        kind: 'ai-diff' as const,
+        filePath: data.filePath,
+        originalContent: data.originalContent,
+        proposedContent: data.proposedContent,
+        approve: approveAndRefresh,
+        reject: data.reject,
+      }];
+    });
+    setActiveTab(tabPath);
   }
 
   function handleNewWindow() {
@@ -540,6 +397,70 @@ function App() {
 
   function handleToggleSidebar() {
     setSidebarOpen(v => !v);
+  }
+
+  async function handleSaveAs() {
+    if (!activeTab) return;
+    const content = fileContents[activeTab];
+    if (content === undefined) return;
+    const tab = tabs.find(t => t.path === activeTab);
+    const dest = await save({ defaultPath: tab?.name });
+    if (!dest) return;
+    const newName = dest.split(/[\\/]/).filter(Boolean).pop() ?? dest;
+    await writeFile(dest, content);
+    setTabs(prev => prev.map(t =>
+      t.path === activeTab ? { ...t, path: dest, name: newName, isDirty: false, isUntitled: false } : t
+    ));
+    setActiveTab(dest);
+    setFileContents(prev => {
+      const next = { ...prev, [dest]: content };
+      if (dest !== activeTab) delete next[activeTab];
+      return next;
+    });
+  }
+
+  async function handleSaveAll() {
+    const dirty = tabs.filter(t => t.isDirty && !t.isUntitled);
+    for (const tab of dirty) {
+      await handleSaveRef.current(tab.path);
+    }
+  }
+
+  function handleCloseFolder() {
+    setFolderPath(null);
+  }
+
+  function handleZoomIn() {
+    setZoom(prev => {
+      const next = Math.min(+(prev + 0.1).toFixed(1), 2.0);
+      document.documentElement.style.zoom = String(next);
+      return next;
+    });
+  }
+
+  function handleZoomOut() {
+    setZoom(prev => {
+      const next = Math.max(+(prev - 0.1).toFixed(1), 0.5);
+      document.documentElement.style.zoom = String(next);
+      return next;
+    });
+  }
+
+  function handleZoomReset() {
+    setZoom(1.0);
+    document.documentElement.style.zoom = '1';
+  }
+
+  function handleNewTerminalTab() {
+    if (!terminalOpen) {
+      setTerminalOpen(true);
+    } else {
+      terminalRef.current?.addTab();
+    }
+  }
+
+  function handleAbout() {
+    window.alert('Origin IDE\nVersion 0.1.0\n\nBuilt with Tauri 2.x + React + CodeMirror 6.');
   }
 
   return (
@@ -562,6 +483,29 @@ function App() {
           onNewWindow={handleNewWindow}
           gitBranch={gitBranch}
           dirtyCount={tabs.filter(t => t.isDirty).length}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={handleToggleFullscreen}
+          hasActiveTab={!!activeTab && !activeTab.startsWith('__diff__')}
+          hasFolderOpen={!!folderPath}
+          onSave={() => activeTab && handleSaveRef.current(activeTab)}
+          onSaveAs={handleSaveAs}
+          onSaveAll={handleSaveAll}
+          onCloseEditor={() => activeTab && closeTab(activeTab)}
+          onCloseFolder={handleCloseFolder}
+          onEditorUndo={() => editorRef.current?.undo()}
+          onEditorRedo={() => editorRef.current?.redo()}
+          onEditorCut={() => editorRef.current?.cut()}
+          onEditorCopy={() => editorRef.current?.copy()}
+          onEditorPaste={() => editorRef.current?.paste()}
+          onEditorSelectAll={() => editorRef.current?.selectAll()}
+          onEditorFind={() => editorRef.current?.openFind()}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onZoomReset={handleZoomReset}
+          onNewTerminalTab={handleNewTerminalTab}
+          onClearTerminal={() => terminalRef.current?.clearActive()}
+          onKillTerminal={() => terminalRef.current?.killActive()}
+          onAbout={handleAbout}
         />
       )}
       {!onboardingDone ? (
@@ -569,7 +513,7 @@ function App() {
       ) : (
         <>
           <div className="flex flex-1 overflow-hidden">
-            {sidebarOpen && <Sidebar onFileOpen={openTab} onFileOpenAtLine={openTabAtLine} />}
+            {sidebarOpen && <Sidebar onFileOpen={openTab} onFileOpenAtLine={openTabAtLine} fileTreeKey={fileTreeVersion} />}
             <div className="flex flex-1 overflow-hidden">
             <div className="flex-1 flex flex-col overflow-hidden">
               <TabBar
@@ -585,6 +529,17 @@ function App() {
                     onFileOpen={handleOpenFile}
                     onNewFile={handleNewFile}
                   />
+                ) : activeTab?.startsWith('__diff__') ? (
+                  (() => {
+                    const diffTab = tabs.find(t => t.path === activeTab) as AiDiffTabData | undefined;
+                    if (!diffTab) return null;
+                    return (
+                      <AiDiffPane
+                        tab={diffTab}
+                        onClose={() => closeTab(activeTab)}
+                      />
+                    );
+                  })()
                 ) : activeTab && fileContents[activeTab] !== undefined ? (
                   <Editor
                     ref={editorRef}
@@ -624,6 +579,7 @@ function App() {
               </main>
               {terminalOpen && (
                 <TerminalPanel
+                  ref={terminalRef}
                   cwd={folderPath ?? "."}
                   height={terminalHeight}
                   onResize={setTerminalHeight}
@@ -639,6 +595,7 @@ function App() {
                 onForcedContextConsumed={() => setPinnedContext(null)}
                 onApplyCode={handleApplyCode}
                 getOpenTabPaths={() => tabs.map(t => t.path)}
+                onOpenDiffTab={openAiDiffTab}
               />
             )}
             </div>

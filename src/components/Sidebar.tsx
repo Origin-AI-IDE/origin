@@ -11,6 +11,7 @@ const DEFAULT_WIDTH = 240;
 interface Props {
   onFileOpen: (path: string) => void;
   onFileOpenAtLine: (path: string, line: number, col: number) => void;
+  fileTreeKey?: number;
 }
 
 function PanelPlaceholder({ label }: { label: string }) {
@@ -21,13 +22,14 @@ function PanelPlaceholder({ label }: { label: string }) {
   );
 }
 
-function ActivePanel({ id, onFileOpen, onFileOpenAtLine }: {
+function ActivePanel({ id, onFileOpen, onFileOpenAtLine, fileTreeKey }: {
   id: string;
   onFileOpen: (path: string) => void;
   onFileOpenAtLine: (path: string, line: number, col: number) => void;
+  fileTreeKey?: number;
 }) {
   switch (id) {
-    case "explorer":   return <FileTree onFileOpen={onFileOpen} />;
+    case "explorer":   return <FileTree onFileOpen={onFileOpen} refreshKey={fileTreeKey} />;
     case "search":     return <SearchPanel onFileOpenAtLine={onFileOpenAtLine} />;
     case "sourcetree": return <SourceTreePanel />;
     case "extensions": return <PanelPlaceholder label="Extensions" />;
@@ -35,7 +37,7 @@ function ActivePanel({ id, onFileOpen, onFileOpenAtLine }: {
   }
 }
 
-export default function Sidebar({ onFileOpen, onFileOpenAtLine }: Props) {
+export default function Sidebar({ onFileOpen, onFileOpenAtLine, fileTreeKey }: Props) {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [active, setActive] = useState("explorer");
   const isResizing = useRef(false);
@@ -73,6 +75,7 @@ export default function Sidebar({ onFileOpen, onFileOpenAtLine }: Props) {
         id={active}
         onFileOpen={onFileOpen}
         onFileOpenAtLine={onFileOpenAtLine}
+        fileTreeKey={fileTreeKey}
       />
 
       {/* Resize handle */}

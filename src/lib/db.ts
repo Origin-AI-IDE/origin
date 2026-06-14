@@ -33,11 +33,18 @@ async function _initSchema(db: Database): Promise<void> {
       content TEXT NOT NULL DEFAULT '',
       attachments_json TEXT,
       editor_context_json TEXT,
+      tool_calls_json TEXT,
       status TEXT NOT NULL DEFAULT 'complete',
       model TEXT,
       created_at INTEGER NOT NULL
     )
   `);
+  // Migration: add column for existing databases that pre-date tool call persistence
+  try {
+    await db.execute(`ALTER TABLE messages ADD COLUMN tool_calls_json TEXT`);
+  } catch (_e) {
+    // Column already exists — ignore
+  }
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_path, updated_at DESC)`
   );
@@ -65,6 +72,7 @@ export interface DbMessage {
   content: string;
   attachments_json: string | null;
   editor_context_json: string | null;
+  tool_calls_json: string | null;
   status: string;
   model: string | null;
   created_at: number;
@@ -141,12 +149,20 @@ export async function updateMessageContent(
   id: string,
   content: string,
   status: string,
+  toolCallsJson?: string | null,
 ): Promise<void> {
   const db = await getDb();
-  await db.execute(
-    `UPDATE messages SET content = ?, status = ? WHERE id = ?`,
-    [content, status, id],
-  );
+  if (toolCallsJson !== undefined) {
+    await db.execute(
+      `UPDATE messages SET content = ?, status = ?, tool_calls_json = ? WHERE id = ?`,
+      [content, status, toolCallsJson, id],
+    );
+  } else {
+    await db.execute(
+      `UPDATE messages SET content = ?, status = ? WHERE id = ?`,
+      [content, status, id],
+    );
+  }
 }
 
 export async function loadMessages(sessionId: string): Promise<DbMessage[]> {

@@ -80,14 +80,80 @@ fn read_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn write_file(path: String, content: String) -> Result<(), String> {
-    std::fs::write(&path, content).map_err(|e| e.to_string())
+    let p = std::path::Path::new(&path);
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(p, content).map_err(|e| e.to_string())
+}
+
+// ── File system mutations ─────────────────────────────────────────────────────
+
+#[tauri::command]
+fn rename_path(from: String, to: String) -> Result<(), String> {
+    std::fs::rename(&from, &to).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_path(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if p.is_dir() {
+        std::fs::remove_dir_all(p).map_err(|e| e.to_string())
+    } else {
+        std::fs::remove_file(p).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn create_dir_cmd(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn reveal_in_explorer(path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path))
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let parent = std::path::Path::new(&path)
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.clone());
+        std::process::Command::new("xdg-open")
+            .arg(&parent)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 // ── Git ───────────────────────────────────────────────────────────────────────
 
+fn git_cmd() -> std::process::Command {
+    let mut cmd = std::process::Command::new("git");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
 #[tauri::command]
 fn git_branch(path: String) -> Option<String> {
-    let out = std::process::Command::new("git")
+    let out = git_cmd()
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(&path)
         .output()
@@ -100,7 +166,7 @@ fn git_branch(path: String) -> Option<String> {
         return None;
     }
     if branch == "HEAD" {
-        let hash = std::process::Command::new("git")
+        let hash = git_cmd()
             .args(["rev-parse", "--short", "HEAD"])
             .current_dir(&path)
             .output()
@@ -491,7 +557,7 @@ struct GitChanges {
 #[tauri::command]
 fn git_changes(path: String) -> Option<GitChanges> {
     // Require this to be a git repo
-    let status = std::process::Command::new("git")
+    let status = git_cmd()
         .args(["status", "--porcelain"])
         .current_dir(&path)
         .output()
@@ -505,7 +571,7 @@ fn git_changes(path: String) -> Option<GitChanges> {
         .count();
 
     // Commits ahead of upstream (silently 0 when no upstream is set)
-    let commits_ahead = std::process::Command::new("git")
+    let commits_ahead = git_cmd()
         .args(["rev-list", "--count", "@{u}..HEAD"])
         .current_dir(&path)
         .output()
@@ -515,7 +581,7 @@ fn git_changes(path: String) -> Option<GitChanges> {
         .unwrap_or(0);
 
     // Recent commit log (use \x01 as field separator)
-    let log = std::process::Command::new("git")
+    let log = git_cmd()
         .args(["log", "--max-count=5", "--pretty=format:%h\x01%s"])
         .current_dir(&path)
         .output()
@@ -554,7 +620,7 @@ struct FullCommitEntry {
 
 #[tauri::command]
 fn git_status_files(path: String) -> Vec<StatusFile> {
-    let Ok(out) = std::process::Command::new("git")
+    let Ok(out) = git_cmd()
         .args(["status", "--porcelain"])
         .current_dir(&path)
         .output()
@@ -572,7 +638,7 @@ fn git_status_files(path: String) -> Vec<StatusFile> {
 
 #[tauri::command]
 fn git_log_full(path: String) -> Vec<FullCommitEntry> {
-    let Ok(out) = std::process::Command::new("git")
+    let Ok(out) = git_cmd()
         .args(["log", "--max-count=100", "--pretty=format:%h\x01%s\x01%an\x01%ar"])
         .current_dir(&path)
         .output()
@@ -595,7 +661,7 @@ fn git_log_full(path: String) -> Vec<FullCommitEntry> {
 
 #[tauri::command]
 fn git_commit(path: String, title: String, description: String) -> Result<String, String> {
-    let stage = std::process::Command::new("git")
+    let stage = git_cmd()
         .args(["add", "-A"])
         .current_dir(&path)
         .output()
@@ -603,7 +669,7 @@ fn git_commit(path: String, title: String, description: String) -> Result<String
     if !stage.status.success() {
         return Err(String::from_utf8_lossy(&stage.stderr).into_owned());
     }
-    let mut cmd = std::process::Command::new("git");
+    let mut cmd = git_cmd();
     cmd.args(["commit", "-m", &title]).current_dir(&path);
     if !description.is_empty() {
         cmd.args(["-m", &description]);
@@ -618,7 +684,7 @@ fn git_commit(path: String, title: String, description: String) -> Result<String
 #[tauri::command]
 fn git_commit_push(path: String, title: String, description: String) -> Result<String, String> {
     git_commit(path.clone(), title, description)?;
-    let push = std::process::Command::new("git")
+    let push = git_cmd()
         .args(["push"])
         .current_dir(&path)
         .output()
@@ -1028,6 +1094,103 @@ async fn ai_chat_stream(
     Ok(())
 }
 
+// ── Agent bash runner ─────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct BashResult {
+    stdout:    String,
+    stderr:    String,
+    exit_code: i32,
+}
+
+#[tauri::command]
+async fn agent_bash_run(command: String, cwd: String) -> Result<BashResult, String> {
+    #[cfg(windows)]
+    let (shell, flag) = ("powershell.exe", "-Command");
+    #[cfg(not(windows))]
+    let (shell, flag) = (std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()).as_str(), "-c");
+
+    let out = tokio::task::spawn_blocking(move || {
+        let mut cmd = std::process::Command::new(shell);
+        cmd.args([flag, &command]).current_dir(&cwd);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+        cmd.output()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+
+    Ok(BashResult {
+        stdout:    String::from_utf8_lossy(&out.stdout).into_owned(),
+        stderr:    String::from_utf8_lossy(&out.stderr).into_owned(),
+        exit_code: out.status.code().unwrap_or(-1),
+    })
+}
+
+// ── AI stream proxy ───────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize, Clone)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum ProxyEvent {
+    Status  { code: u16, headers: Vec<(String, String)> },
+    Chunk   { bytes: Vec<u8> },
+    Done,
+    Error   { message: String },
+}
+
+#[tauri::command]
+async fn ai_stream_proxy(
+    url: String,
+    method: String,
+    headers: HashMap<String, String>,
+    body: Option<String>,
+    channel: tauri::ipc::Channel<ProxyEvent>,
+) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let method_val = reqwest::Method::from_bytes(method.as_bytes())
+        .map_err(|e| e.to_string())?;
+
+    let mut req = client.request(method_val, &url);
+    for (k, v) in &headers {
+        req = req.header(k, v);
+    }
+    if let Some(b) = body {
+        req = req.body(b);
+    }
+
+    tokio::spawn(async move {
+        let resp = match req.send().await {
+            Ok(r) => r,
+            Err(e) => { let _ = channel.send(ProxyEvent::Error { message: e.to_string() }); return; }
+        };
+
+        let code = resp.status().as_u16();
+        let resp_headers: Vec<(String, String)> = resp.headers().iter()
+            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+        let _ = channel.send(ProxyEvent::Status { code, headers: resp_headers });
+
+        let mut stream = resp;
+        loop {
+            match stream.chunk().await {
+                Ok(Some(chunk)) => { let _ = channel.send(ProxyEvent::Chunk { bytes: chunk.to_vec() }); }
+                Ok(None)        => { let _ = channel.send(ProxyEvent::Done); break; }
+                Err(e)          => { let _ = channel.send(ProxyEvent::Error { message: e.to_string() }); break; }
+            }
+        }
+    });
+
+    Ok(())
+}
+
 // ── HTTP fetch (for frontend pricing/data fetches) ────────────────────────────
 
 #[tauri::command]
@@ -1200,6 +1363,10 @@ pub fn run() {
             read_dir,
             read_file,
             write_file,
+            rename_path,
+            delete_path,
+            create_dir_cmd,
+            reveal_in_explorer,
             git_branch,
             git_changes,
             git_status_files,
@@ -1217,6 +1384,8 @@ pub fn run() {
             get_file_tree,
             get_import_edges,
             ai_chat_stream,
+            agent_bash_run,
+            ai_stream_proxy,
             fetch_text,
             patch_apply_snippet,
             patch_replace_region,

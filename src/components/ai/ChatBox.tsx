@@ -1,63 +1,66 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Plus, ArrowUp, SlidersHorizontal, /*ChevronDown, Bot, MessageCircle, Map,*/ FileCode, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Plus, ArrowUp, SlidersHorizontal, ChevronDown, Bot, MessageCircle, Map, FileCode, X } from "lucide-react";
 import PreferencesDropdown from "./PreferencesDropdown";
 import MentionDropdown from "./MentionDropdown";
 import { DEFAULT_MODEL_ID, DEFAULT_PROVIDER_ID } from "./providers";
 import type { EditorContext } from "../editor/Editor";
 import { useWorkspace } from "../../context/WorkspaceContext";
 
-// ── Mode selector (commented out — not used yet) ──────────────────────────────
-// type Mode = "agent" | "ask" | "plan";
-//
-// const MODES = [
-//   { id: "agent" as Mode, Icon: Bot,           label: "Agent", description: "Autonomously writes, edits, and runs code to complete your task." },
-//   { id: "ask"   as Mode, Icon: MessageCircle, label: "Ask",   description: "Ask questions about your codebase and get instant answers." },
-//   { id: "plan"  as Mode, Icon: Map,           label: "Plan",  description: "Explores your codebase and writes a structured plan.md for your goal." },
-// ];
-//
-// function ModeDropdown({ anchorEl, selected, onSelect, onClose }: {
-//   anchorEl: HTMLElement | null; selected: Mode; onSelect: (m: Mode) => void; onClose: () => void;
-// }) {
-//   const menuRef = useRef<HTMLDivElement>(null);
-//   const [pos, setPos] = useState({ top: 0, left: 0 });
-//   const [hovered, setHovered] = useState<Mode | null>(null);
-//   useEffect(() => {
-//     if (!anchorEl) return;
-//     const r = anchorEl.getBoundingClientRect();
-//     setPos({ left: r.left, top: r.bottom + 6 });
-//   }, [anchorEl]);
-//   useEffect(() => {
-//     function onDown(e: MouseEvent) { if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose(); }
-//     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
-//     document.addEventListener("mousedown", onDown);
-//     document.addEventListener("keydown", onKey);
-//     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
-//   }, [onClose]);
-//   if (!anchorEl) return null;
-//   return createPortal(
-//     <div ref={menuRef} style={{ position:"fixed", top:pos.top, left:pos.left, minWidth:"200px", maxWidth:"220px",
-//       background:"color-mix(in srgb, var(--origin-bg-base) 80%, transparent)", backdropFilter:"blur(16px)",
-//       WebkitBackdropFilter:"blur(16px)", border:"1px solid var(--origin-border-default)", borderRadius:"10px",
-//       boxShadow:"0 8px 32px rgba(0,0,0,0.35)", padding:"4px", zIndex:9999 }}>
-//       {MODES.map(({ id, Icon, label, description }) => {
-//         const isSelected = selected === id; const isHovered = hovered === id;
-//         return (
-//           <button key={id} onMouseEnter={() => setHovered(id)} onMouseLeave={() => setHovered(null)}
-//             onClick={() => { onSelect(id); onClose(); }}
-//             style={{ width:"100%", display:"flex", alignItems:"flex-start", gap:"10px", padding:"8px 10px",
-//               borderRadius:"7px", border:"none", cursor:"pointer",
-//               background: isHovered ? "var(--origin-bg-hover)" : "transparent", textAlign:"left", transition:"background 0.1s" }}>
-//             <div style={{ marginTop:"1px", color: isSelected ? "var(--origin-fg-default)" : "var(--origin-fg-muted)", flexShrink:0 }}><Icon size={15} /></div>
-//             <div>
-//               <div style={{ fontSize:"13px", fontWeight: isSelected ? 600 : 400, color:"var(--origin-fg-default)", marginBottom:"2px" }}>{label}</div>
-//               <div style={{ fontSize:"11px", color:"var(--origin-fg-muted)", lineHeight:"1.4" }}>{description}</div>
-//             </div>
-//           </button>
-//         );
-//       })}
-//     </div>, document.body
-//   );
-// }
+// ── Mode selector ─────────────────────────────────────────────────────────────
+
+type Mode = "agent" | "ask" | "plan";
+
+const MODES = [
+  { id: "agent" as Mode, Icon: Bot,           label: "Agent", description: "Autonomously writes, edits, and runs code to complete your task." },
+  { id: "ask"   as Mode, Icon: MessageCircle, label: "Ask",   description: "Ask questions about your codebase and get instant answers." },
+  { id: "plan"  as Mode, Icon: Map,           label: "Plan",  description: "Explores your codebase and writes a structured plan before making any changes." },
+];
+
+function ModeDropdown({ anchorEl, selected, onSelect, onClose }: {
+  anchorEl: HTMLElement | null; selected: Mode; onSelect: (m: Mode) => void; onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [hovered, setHovered] = useState<Mode | null>(null);
+  useEffect(() => {
+    if (!anchorEl) return;
+    const r = anchorEl.getBoundingClientRect();
+    setPos({ left: r.left, top: r.top - 6 });
+  }, [anchorEl]);
+  useEffect(() => {
+    function onDown(e: MouseEvent) { if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose(); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [onClose]);
+  if (!anchorEl) return null;
+  return createPortal(
+    <div ref={menuRef} style={{ position:"fixed", top:pos.top, left:pos.left, minWidth:"200px", maxWidth:"220px",
+      transform:"translateY(-100%)",
+      background:"color-mix(in srgb, var(--origin-bg-base) 90%, transparent)", backdropFilter:"blur(16px)",
+      WebkitBackdropFilter:"blur(16px)", border:"1px solid var(--origin-border-default)", borderRadius:"10px",
+      boxShadow:"0 8px 32px rgba(0,0,0,0.35)", padding:"4px", zIndex:9999 }}>
+      {MODES.map(({ id, Icon, label, description }) => {
+        const isSelected = selected === id; const isHovered = hovered === id;
+        return (
+          <button key={id} onMouseEnter={() => setHovered(id)} onMouseLeave={() => setHovered(null)}
+            onClick={() => { onSelect(id); onClose(); }}
+            style={{ width:"100%", display:"flex", alignItems:"flex-start", gap:"10px", padding:"8px 10px",
+              borderRadius:"7px", border:"none", cursor:"pointer",
+              background: isHovered ? "var(--origin-bg-hover)" : "transparent", textAlign:"left", transition:"background 0.1s" }}>
+            <div style={{ marginTop:"1px", color: isSelected ? "var(--origin-fg-default)" : "var(--origin-fg-muted)", flexShrink:0 }}><Icon size={15} /></div>
+            <div>
+              <div style={{ fontSize:"13px", fontWeight: isSelected ? 600 : 400, color:"var(--origin-fg-default)", marginBottom:"2px" }}>{label}</div>
+              <div style={{ fontSize:"11px", color:"var(--origin-fg-muted)", lineHeight:"1.4" }}>{description}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>, document.body
+  );
+}
 
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -184,7 +187,7 @@ function contextLabel(ctx: EditorContext): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface ChatBoxProps {
-  onSend?: (text: string, modelId: string, providerId: string, fileMentions: string[], editorContext: EditorContext | null) => void;
+  onSend?: (text: string, modelId: string, providerId: string, fileMentions: string[], editorContext: EditorContext | null, mode: Mode) => void;
   getEditorContext?: () => EditorContext | null;
   forcedContext?: EditorContext | null;
   onForcedContextConsumed?: () => void;
@@ -194,15 +197,15 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
   const { folderPath } = useWorkspace();
   const containerRef = useRef<HTMLDivElement>(null);
   const editableRef = useRef<HTMLDivElement>(null);
-  // const modeAnchorRef = useRef<HTMLDivElement>(null);
+  const modeAnchorRef = useRef<HTMLDivElement>(null);
   const prefsAnchorRef = useRef<HTMLButtonElement>(null);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
   const mentionRangeRef = useRef<Range | null>(null);
 
   const [isEmpty, setIsEmpty] = useState(true);
   const [focused, setFocused] = useState(false);
-  // const [mode, setMode] = useState<Mode>("agent");
-  // const [modeOpen, setModeOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("agent");
+  const [modeOpen, setModeOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [mentionActive, setMentionActive] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
@@ -258,7 +261,7 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
     const { displayText, fileMentions } = parseContent(el);
     if (!displayText && fileMentions.length === 0) return;
     const editorContext = contextDismissed ? null : contextSnap;
-    onSend?.(displayText, selectedModelId, selectedProviderId, fileMentions, editorContext);
+    onSend?.(displayText, selectedModelId, selectedProviderId, fileMentions, editorContext, mode);
     el.innerHTML = "";
     setIsEmpty(true);
     setMentionActive(false);
@@ -321,7 +324,7 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
     mentionRangeRef.current = null;
   };
 
-  // const currentMode = MODES.find(m => m.id === mode)!;
+  const currentMode = MODES.find(m => m.id === mode)!;
   const showContextBadge = contextSnap && !contextDismissed;
 
   return (
@@ -497,19 +500,20 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
           <Plus size={14} />
         </button>
 
-        {/* Mode selector — commented out */}
-        {/* <div
+        <div
           ref={modeAnchorRef}
           onClick={() => setModeOpen(v => !v)}
-          style={{ display:"flex", alignItems:"center", gap:"6px", fontSize:"12px", fontWeight:500,
-            padding:"2px 6px 2px 8px", borderRadius:"9999px", border:"1px solid var(--origin-border-default)",
-            backgroundColor:"var(--origin-bg-hover)", color:"var(--origin-fg-muted)", userSelect:"none", cursor:"pointer" }}>
+          style={{ display:"flex", alignItems:"center", gap:"5px", fontSize:"12px", fontWeight:500,
+            padding:"2px 7px 2px 8px", borderRadius:"9999px", border:"1px solid var(--origin-border-default)",
+            backgroundColor: mode !== "agent" ? "var(--origin-bg-active)" : "transparent",
+            color: mode !== "agent" ? "var(--origin-fg-default)" : "var(--origin-fg-muted)",
+            userSelect:"none", cursor:"pointer", transition:"background 0.1s, color 0.1s" }}>
           {currentMode.label}
-          <ChevronDown size={11} />
+          <ChevronDown size={10} />
         </div>
         {modeOpen && (
           <ModeDropdown anchorEl={modeAnchorRef.current} selected={mode} onSelect={setMode} onClose={() => setModeOpen(false)} />
-        )} */}
+        )}
 
         <div style={{ flex: 1 }} />
 

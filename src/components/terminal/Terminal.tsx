@@ -15,6 +15,7 @@ import { useTheme } from "../../themes/ThemeContext";
 interface Props {
   cwd: string;
   active: boolean;
+  clearKey?: number;
 }
 
 function cssVar(name: string): string {
@@ -47,13 +48,18 @@ function buildTheme() {
   };
 }
 
-export default function Terminal({ cwd, active }: Props) {
+export default function Terminal({ cwd, active, clearKey }: Props) {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef    = useRef<XTerm | null>(null);
   const cwdRef      = useRef(cwd);
   const termIdRef   = useRef<number | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+
+  useEffect(() => {
+    if (!clearKey) return;
+    xtermRef.current?.clear();
+  }, [clearKey]);
 
   // Create the xterm instance once on mount
   useEffect(() => {

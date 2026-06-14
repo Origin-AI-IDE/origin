@@ -50,13 +50,47 @@
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background-color: #333; border-radius: 3px; }
 
+/* Anchor the document chrome to the viewport rectangle the compositor
+   maintains, rather than to a computed height. `position: fixed; inset: 0`
+   always fills the live window — it does not depend on WebView2 recomputing
+   `100dvh`, nor on a resize event firing during programmatic setFullscreen(),
+   nor on getting the physical→CSS pixel division exactly right. This is what
+   fixes the "black bar at the bottom after fullscreen" bug. */
 html, body, #root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   height: 100%;
   overflow: hidden;
   margin: 0;
   padding: 0;
   font-family: var(--font-sans);
   background-color: #0a0a0a;
+}
+
+/* `#root`'s direct child uses Tailwind `h-full` (height: 100%). With the
+   ancestors fixed+inset-0, 100% resolves against a fully-stretched box, so
+   the flex column fills the window. Belt-and-suspenders: anchor it too. */
+#root > * {
+  height: 100%;
+}
+
+/* Plan badge action colours — solid backgrounds that adapt to theme type */
+[data-theme="dark"] {
+  --plan-badge-edit-bg:   #3b82f6;
+  --plan-badge-edit-fg:   #fff;
+  --plan-badge-create-bg: #22c55e;
+  --plan-badge-create-fg: #fff;
+  --plan-badge-delete-bg: #ef4444;
+  --plan-badge-delete-fg: #fff;
+}
+[data-theme="light"] {
+  --plan-badge-edit-bg:   #1d4ed8;
+  --plan-badge-edit-fg:   #fff;
+  --plan-badge-create-bg: #15803d;
+  --plan-badge-create-fg: #fff;
+  --plan-badge-delete-bg: #b91c1c;
+  --plan-badge-delete-fg: #fff;
 }
 
 /* CodeMirror selection — global override so it wins regardless of CM6's

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Plus, Terminal, X } from "lucide-react";
 import { getSetting, setSetting, type SavedTermTab } from "../../lib/settings";
 import TerminalInstance from "./Terminal";
@@ -12,6 +12,12 @@ interface TermTab {
   id: number;
   name: string;
   cwd: string;
+}
+
+export interface TerminalPanelHandle {
+  addTab: () => void;
+  clearActive: () => void;
+  killActive: () => void;
 }
 
 interface Props {
@@ -111,13 +117,14 @@ function PanelBtn({
 
 // ── Panel ─────────────────────────────────────────────────────────────────────
 
-export default function TerminalPanel({ cwd, height, onResize, onClose }: Props) {
+const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPanel({ cwd, height, onResize, onClose }, ref) {
   const [tabs, setTabs] = useState<TermTab[]>(() => loadSavedTabs(cwd));
   const [activeId, setActiveId] = useState<number>(() => {
-    const idx = loadSavedActiveIndex(tabs.length); // tabs initialized above
+    const idx = loadSavedActiveIndex(tabs.length);
     return tabs[idx]?.id ?? tabs[0].id;
   });
   const nextId = useRef(initCounter(tabs));
+  const [clearKeys, setClearKeys] = useState<Record<number, number>>({});
 
   // Rename state
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -125,6 +132,16 @@ export default function TerminalPanel({ cwd, height, onResize, onClose }: Props)
   const editInputRef = useRef<HTMLInputElement>(null);
 
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    addTab,
+    clearActive() {
+      setClearKeys(prev => ({ ...prev, [activeId]: (prev[activeId] ?? 0) + 1 }));
+    },
+    killActive() {
+      closeTab(activeId);
+    },
+  }));
 
   // ── Restore from durable store on first mount ────────────────────────────
   useEffect(() => {
@@ -382,10 +399,12 @@ export default function TerminalPanel({ cwd, height, onResize, onClose }: Props)
               pointerEvents: tab.id === activeId ? "auto" : "none",
             }}
           >
-            <TerminalInstance cwd={tab.cwd} active={tab.id === activeId} />
+            <TerminalInstance cwd={tab.cwd} active={tab.id === activeId} clearKey={clearKeys[tab.id] ?? 0} />
           </div>
         ))}
       </div>
     </div>
   );
-}
+});
+
+export default TerminalPanel;

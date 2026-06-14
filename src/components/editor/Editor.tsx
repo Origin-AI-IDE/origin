@@ -3,69 +3,22 @@ import { createPortal } from 'react-dom';
 import {
   EditorView, keymap, lineNumbers,
   highlightActiveLineGutter, highlightActiveLine, drawSelection,
-  Decoration, type DecorationSet, WidgetType,
 } from '@codemirror/view';
-import { EditorState, StateEffect, StateField, type Range } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { EditorState, Compartment } from '@codemirror/state';
+import { undo as cmUndo, redo as cmRedo, selectAll as cmSelectAll, defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import {
   syntaxHighlighting, HighlightStyle,
   bracketMatching, indentOnInput,
 } from '@codemirror/language';
-import { search, searchKeymap } from '@codemirror/search';
+import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
-import { diffLines } from 'diff';
+import { unifiedMergeView } from '@codemirror/merge';
 import { getLanguageExtension, languageLabel } from './languageSupport';
 import type { PatchResult } from '../../lib/patch';
 
-// ── Diff decoration state ─────────────────────────────────────────────────────
-
-const setDiffEffect   = StateEffect.define<DecorationSet>();
-const clearDiffEffect = StateEffect.define<null>();
-
-const diffDecoField = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
-  update(deco, tr) {
-    deco = deco.map(tr.changes);
-    for (const e of tr.effects) {
-      if (e.is(setDiffEffect))   return e.value;
-      if (e.is(clearDiffEffect)) return Decoration.none;
-    }
-    return deco;
-  },
-  provide: f => EditorView.decorations.from(f),
-});
-
-const addedLineDeco = Decoration.line({ class: 'cm-diff-added' });
-
-// ── Deleted-lines ghost widget (shown inline above the replacement) ─────────
-
-class DeletedLinesWidget extends WidgetType {
-  private readonly lines: string[];
-  constructor(lines: string[]) {
-    super();
-    this.lines = lines;
-  }
-  eq(other: DeletedLinesWidget) {
-    return this.lines.join('\n') === other.lines.join('\n');
-  }
-  toDOM() {
-    const container = document.createElement('div');
-    container.style.cssText = 'pointer-events:none;';
-    for (const line of this.lines) {
-      const el = document.createElement('div');
-      el.className = 'cm-diff-deleted';
-      // Use non-breaking space so empty lines still render at full height
-      el.textContent = line || ' ';
-      container.appendChild(el);
-    }
-    return container;
-  }
-  ignoreEvent() { return true; }
-}
-
 // ── Syntax token colors — all via CSS variables ────────────────────────────────
 
-const originHighlight = HighlightStyle.define([
+export const originHighlight = HighlightStyle.define([
   { tag: t.comment,                                    color: 'var(--origin-syntax-comment)', fontStyle: 'italic' },
   { tag: t.lineComment,                                color: 'var(--origin-syntax-comment)', fontStyle: 'italic' },
   { tag: t.blockComment,                               color: 'var(--origin-syntax-comment)', fontStyle: 'italic' },
@@ -102,7 +55,7 @@ const originHighlight = HighlightStyle.define([
 
 // ── Structural theme ───────────────────────────────────────────────────────────
 
-const originBaseTheme = EditorView.theme({
+export const originBaseTheme = EditorView.theme({
   '&': {
     height: '100%',
     backgroundColor: 'transparent',
@@ -188,19 +141,42 @@ const originBaseTheme = EditorView.theme({
     fontFamily: 'var(--font-sans)',
   },
   '.cm-button:hover': { background: 'var(--origin-bg-active)' },
-  // Diff decorations
-  '.cm-diff-added': { backgroundColor: 'rgba(46,160,67,0.28)' },
-  '.cm-diff-deleted': {
-    backgroundColor: 'rgba(218,54,51,0.22)',
-    color: 'rgba(240,100,90,0.85)',
-    textDecoration: 'line-through',
-    display: 'block',
-    fontFamily: 'var(--font-mono, "Geist Mono", monospace)',
-    fontSize: '13px',
-    lineHeight: '1.65',
-    paddingLeft: '56px',
-    whiteSpace: 'pre',
-    userSelect: 'none',
+  // ── Unified merge view (diff) ─────────────────────────────────────────────
+  '.cm-deletedChunk': {
+    backgroundColor: 'rgba(218,54,51,0.14)',
+  },
+  '.cm-deletedChunk-gutter': {
+    backgroundColor: 'rgba(218,54,51,0.28)',
+    borderRight: '3px solid rgba(218,54,51,0.65)',
+  },
+  '.cm-changedChunk': {
+    backgroundColor: 'rgba(46,160,67,0.13)',
+  },
+  '.cm-changedChunk-gutter': {
+    backgroundColor: 'rgba(46,160,67,0.25)',
+    borderRight: '3px solid rgba(46,160,67,0.65)',
+  },
+  '.cm-insertedChunk': {
+    backgroundColor: 'rgba(46,160,67,0.13)',
+  },
+  '.cm-insertedChunk-gutter': {
+    backgroundColor: 'rgba(46,160,67,0.25)',
+    borderRight: '3px solid rgba(46,160,67,0.65)',
+  },
+  '.cm-deletedChunkField': {
+    backgroundColor: 'rgba(218,54,51,0.35)',
+    borderRadius: '2px',
+  },
+  '.cm-changedChunkField': {
+    backgroundColor: 'rgba(46,160,67,0.35)',
+    borderRadius: '2px',
+  },
+  '.cm-collapsedLines': {
+    backgroundColor: 'var(--origin-bg-hover)',
+    color: 'var(--origin-fg-subtle)',
+    cursor: 'pointer',
+    fontSize: '12px',
+    padding: '2px 0',
   },
 });
 
@@ -222,10 +198,16 @@ export interface DiffHunk {
 
 export interface EditorHandle {
   getEditorContext: () => EditorContext | null;
-  /** Replace the hunk (or full doc if no hunk) with snippet and show a diff preview. */
-  showDiff: (snippet: string, hunk?: DiffHunk) => void;
-  /** Load a fully-resolved merge from the patch engine and paint its diff. */
+  showDiff: (newCode: string, originalContent?: string) => void;
   showResolvedDiff: (result: PatchResult) => void;
+  rejectDiff: () => void;
+  undo: () => void;
+  redo: () => void;
+  cut: () => void;
+  copy: () => void;
+  paste: () => void;
+  selectAll: () => void;
+  openFind: () => void;
 }
 
 interface Props {
@@ -237,12 +219,13 @@ interface Props {
   jumpTo?: { line: number; col: number; key: number };
   onAddToAiContext?: (ctx: EditorContext) => void;
   onAcceptDiff?: () => void;
+  onReady?: () => void;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { path, content, onChange, onCursorChange, initialCursor, jumpTo, onAddToAiContext, onAcceptDiff }, ref
+  { path, content, onChange, onCursorChange, initialCursor, jumpTo, onAddToAiContext, onAcceptDiff, onReady }, ref
 ) {
   const containerRef   = useRef<HTMLDivElement>(null);
   const viewRef        = useRef<EditorView | null>(null);
@@ -251,11 +234,12 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
   const onCursorRef    = useRef(onCursorChange);
   onCursorRef.current  = onCursorChange;
 
+  // One Compartment per editor instance — lets us swap in/out the merge extension.
+  const mergeCompartment = useRef(new Compartment());
+
   // Diff state
   const [diffPending, setDiffPending] = useState(false);
-  const diffOriginalRef  = useRef<string>('');
-  // Tracks which hunk was replaced (null = full-file diff)
-  const diffHunkRef = useRef<{ fromPos: number; toPos: number; deletedText: string; insertedLines: number } | null>(null);
+  const diffOriginalRef = useRef<string>('');
 
   type CtxMenu = { x: number; y: number; ctx: EditorContext };
   const [contextMenu, setContextMenu] = useState<CtxMenu | null>(null);
@@ -298,193 +282,91 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       return { filename, language, code: state.sliceDoc(from, to), type: 'viewport', startLine, endLine };
     },
 
-    showDiff(snippet: string, hunk?: DiffHunk) {
+    showDiff(newCode: string, originalContent?: string) {
       const view = viewRef.current;
       if (!view) return;
 
-      const doc      = view.state.doc;
-      const original = doc.toString();
+      // Use the explicitly supplied original when the view content may be stale
+      // (e.g. file just opened — CodeMirror view was created before content loaded).
+      const original = originalContent !== undefined ? originalContent : view.state.doc.toString();
       diffOriginalRef.current = original;
-      diffHunkRef.current = null;
 
-      const decoRanges: Range<Decoration>[] = [];
-
-      if (hunk) {
-        // ── Hunk-level replacement ─────────────────────────────────────────────
-        const fromLine = Math.max(1, Math.min(hunk.fromLine, doc.lines));
-        const toLine   = Math.max(fromLine, Math.min(hunk.toLine, doc.lines));
-        const fromPos  = doc.line(fromLine).from;
-        const toPos    = doc.line(toLine).to;
-
-        const deletedText  = doc.sliceString(fromPos, toPos);
-        const deletedLines = deletedText.split('\n');
-        const snippetLines = snippet.split('\n');
-
-        // Replace only the hunk
-        view.dispatch({ changes: { from: fromPos, to: toPos, insert: snippet } });
-
-        // Store for reject
-        diffHunkRef.current = {
-          fromPos,
-          toPos: fromPos + snippet.length, // new end after insertion
-          deletedText,
-          insertedLines: snippetLines.length,
-        };
-
-        // Green decorations on the new (inserted) lines
-        for (let i = 0; i < snippetLines.length; i++) {
-          const lineNum = fromLine + i;
-          if (lineNum <= view.state.doc.lines) {
-            decoRanges.push(addedLineDeco.range(view.state.doc.line(lineNum).from));
-          }
-        }
-
-        // Red ghost widget for the deleted lines — appears above the replacement
-        if (deletedLines.length > 0 && deletedText.trim() !== '') {
-          const insertPos = view.state.doc.line(fromLine).from;
-          decoRanges.push(
-            Decoration.widget({
-              widget: new DeletedLinesWidget(deletedLines),
-              side: -1,
-            }).range(insertPos),
-          );
-        }
-      } else {
-        // ── Full-file replacement (fallback when no hunk is known) ──────────────
-        view.dispatch({ changes: { from: 0, to: doc.length, insert: snippet } });
-
-        const changes = diffLines(original, snippet);
-        let lineInNew = 1;
-        let pendingDeleted: string[] = [];
-
-        for (const ch of changes) {
-          const count = ch.count ?? 0;
-          if (ch.removed) {
-            // Collect deleted lines — will be shown as red ghost widget
-            // before the next surviving line (or at end of file).
-            const raw = (ch.value ?? '').split('\n');
-            // diffLines includes a trailing empty string from the final \n — drop it
-            if (raw[raw.length - 1] === '') raw.pop();
-            pendingDeleted.push(...raw);
-            continue;
-          }
-
-          // Flush pending deletions before this block of unchanged/added lines
-          if (pendingDeleted.length > 0) {
-            const atLine = Math.min(lineInNew, view.state.doc.lines);
-            if (atLine >= 1) {
-              decoRanges.push(
-                Decoration.widget({ widget: new DeletedLinesWidget(pendingDeleted), side: -1 })
-                  .range(view.state.doc.line(atLine).from),
-              );
-            }
-            pendingDeleted = [];
-          }
-
-          if (ch.added) {
-            for (let i = 0; i < count; i++) {
-              const lineNum = lineInNew + i;
-              if (lineNum <= view.state.doc.lines) {
-                decoRanges.push(addedLineDeco.range(view.state.doc.line(lineNum).from));
-              }
-            }
-          }
-          lineInNew += count;
-        }
-
-        // Flush any deletions at the very end of the file
-        if (pendingDeleted.length > 0 && view.state.doc.lines >= 1) {
-          decoRanges.push(
-            Decoration.widget({ widget: new DeletedLinesWidget(pendingDeleted), side: 1 })
-              .range(view.state.doc.line(view.state.doc.lines).to),
-          );
-        }
-      }
-
-      if (decoRanges.length > 0) {
-        view.dispatch({
-          effects: setDiffEffect.of(Decoration.set(decoRanges, true)),
-        });
-      }
+      // Atomically: replace the document + enable the merge extension.
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: newCode },
+        effects: mergeCompartment.current.reconfigure(
+          unifiedMergeView({
+            original,
+            highlightChanges: true,
+            collapseUnchanged: { margin: 3, minSize: 4 },
+          })
+        ),
+      });
 
       setDiffPending(true);
     },
 
     showResolvedDiff(result: PatchResult) {
+      if (result.merged_content == null) return;
+      this.showDiff(result.merged_content);
+    },
+
+    rejectDiff() {
+      handleRejectDiff();
+    },
+
+    undo() { if (viewRef.current) cmUndo(viewRef.current); },
+    redo() { if (viewRef.current) cmRedo(viewRef.current); },
+    selectAll() { if (viewRef.current) cmSelectAll(viewRef.current); },
+    openFind() { if (viewRef.current) openSearchPanel(viewRef.current); },
+
+    cut() {
       const view = viewRef.current;
       if (!view) return;
-      if (result.merged_content == null || result.diff == null) return;
+      const sel = view.state.selection.main;
+      if (sel.from === sel.to) return;
+      navigator.clipboard.writeText(view.state.sliceDoc(sel.from, sel.to));
+      view.dispatch(view.state.replaceSelection(''));
+    },
 
-      const doc = view.state.doc;
-      diffOriginalRef.current = doc.toString();
-      diffHunkRef.current = null;
+    copy() {
+      const view = viewRef.current;
+      if (!view) return;
+      const sel = view.state.selection.main;
+      if (sel.from === sel.to) return;
+      navigator.clipboard.writeText(view.state.sliceDoc(sel.from, sel.to));
+    },
 
-      // Swap the whole document for the engine-merged content in one change.
-      view.dispatch({ changes: { from: 0, to: doc.length, insert: result.merged_content } });
-
-      const newDoc = view.state.doc;
-      const decoRanges: Range<Decoration>[] = [];
-
-      for (const line of result.diff.lines) {
-        if (line.kind === 'added' && line.new_line >= 1 && line.new_line <= newDoc.lines) {
-          decoRanges.push(addedLineDeco.range(newDoc.line(line.new_line).from));
-        }
-      }
-
-      for (const block of result.diff.deletions) {
-        // after_new_line === 0 anchors the ghost rows at the very top of the doc.
-        const pos = block.after_new_line === 0
-          ? 0
-          : newDoc.line(Math.min(block.after_new_line, newDoc.lines)).from;
-        decoRanges.push(
-          Decoration.widget({ widget: new DeletedLinesWidget(block.lines), side: -1 }).range(pos),
-        );
-      }
-
-      if (decoRanges.length > 0) {
-        view.dispatch({ effects: setDiffEffect.of(Decoration.set(decoRanges, true)) });
-      }
-
-      setDiffPending(true);
+    paste() {
+      const view = viewRef.current;
+      if (!view) return;
+      navigator.clipboard.readText().then(text => {
+        view.dispatch(view.state.replaceSelection(text));
+      });
     },
   }));
 
   function handleAcceptDiff() {
-    viewRef.current?.dispatch({ effects: clearDiffEffect.of(null) });
+    // Remove merge view, keep the current (modified) document.
+    viewRef.current?.dispatch({
+      effects: mergeCompartment.current.reconfigure([]),
+    });
     setDiffPending(false);
     diffOriginalRef.current = '';
-    diffHunkRef.current     = null;
     onAcceptDiff?.();
   }
 
   function handleRejectDiff() {
     const view = viewRef.current;
     if (view && diffOriginalRef.current !== '') {
-      const hunk = diffHunkRef.current;
-      if (hunk) {
-        // Restore just the replaced hunk
-        const hunkEndLine = Math.min(
-          view.state.doc.lines,
-          view.state.doc.lineAt(hunk.fromPos).number + hunk.insertedLines - 1,
-        );
-        view.dispatch({
-          changes: {
-            from: hunk.fromPos,
-            to: view.state.doc.line(hunkEndLine).to,
-            insert: hunk.deletedText,
-          },
-          effects: clearDiffEffect.of(null),
-        });
-      } else {
-        view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: diffOriginalRef.current },
-          effects: clearDiffEffect.of(null),
-        });
-      }
+      // Restore original document and remove merge view in one transaction.
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: diffOriginalRef.current },
+        effects: mergeCompartment.current.reconfigure([]),
+      });
     }
     setDiffPending(false);
     diffOriginalRef.current = '';
-    diffHunkRef.current     = null;
   }
 
   useEffect(() => {
@@ -504,7 +386,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
         search({ top: false }),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab, ...searchKeymap]),
         getLanguageExtension(path),
-        diffDecoField,
+        mergeCompartment.current.of([]),
         originBaseTheme,
         EditorView.updateListener.of(update => {
           if (update.docChanged) {
@@ -521,13 +403,16 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
+    // Signal the parent that the imperative handle is now usable.
+    // useImperativeHandle runs before useEffect, so editorRef.current is already set.
+    onReady?.();
 
     // Restore cursor position from previous visit to this file
     if (initialCursor && (initialCursor.line > 1 || initialCursor.col > 1)) {
-      const doc    = view.state.doc;
+      const doc     = view.state.doc;
       const lineNum = Math.min(Math.max(1, initialCursor.line), doc.lines);
-      const line   = doc.line(lineNum);
-      const ch     = Math.max(0, Math.min(initialCursor.col - 1, line.length));
+      const line    = doc.line(lineNum);
+      const ch      = Math.max(0, Math.min(initialCursor.col - 1, line.length));
       view.dispatch({ selection: { anchor: line.from + ch }, scrollIntoView: true });
     }
 
@@ -538,7 +423,6 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       viewRef.current = null;
       setDiffPending(false);
       diffOriginalRef.current = '';
-      diffHunkRef.current     = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
@@ -547,10 +431,10 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
   useEffect(() => {
     const view = viewRef.current;
     if (!jumpTo || !view) return;
-    const doc    = view.state.doc;
+    const doc     = view.state.doc;
     const lineNum = Math.min(Math.max(1, jumpTo.line), doc.lines);
-    const line   = doc.line(lineNum);
-    const ch     = Math.max(0, Math.min((jumpTo.col ?? 1) - 1, line.length));
+    const line    = doc.line(lineNum);
+    const ch      = Math.max(0, Math.min((jumpTo.col ?? 1) - 1, line.length));
     view.dispatch({ selection: { anchor: line.from + ch }, scrollIntoView: true });
     view.focus();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -601,7 +485,6 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
               fontFamily: 'var(--font-sans)',
             }}
           >
-            {/* Label — inverted chip: fg color as bg, bg color as text */}
             <span style={{
               padding: '2px 8px',
               borderRadius: 4,

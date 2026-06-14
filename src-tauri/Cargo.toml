@@ -1,8 +1,8 @@
 [package]
-name = "origin-rust"
+name = "origin"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Origin — AI-native code editor"
+authors = ["Origin IDE"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "origin_rust_lib"
+name = "origin_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -31,4 +31,11 @@ sysinfo = "0.30"
 reqwest = { version = "0.12", features = ["json"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 patch-engine = { path = "../../tools/patch-engine" }
+
+[profile.release]
+opt-level   = "z"      # optimize for size (not speed)
+lto         = "thin"   # cross-crate dead-code elimination
+codegen-units = 1      # single codegen unit lets LLVM optimise across more code
+strip       = true     # strip debug symbols from the binary
+panic       = "abort"  # removes unwinding machinery (~200 KB)
 
