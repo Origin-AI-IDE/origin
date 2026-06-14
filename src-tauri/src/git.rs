@@ -1,4 +1,5 @@
 pub(crate) fn git_cmd() -> std::process::Command {
+    #[allow(unused_mut)]
     let mut cmd = std::process::Command::new("git");
     #[cfg(target_os = "windows")]
     {

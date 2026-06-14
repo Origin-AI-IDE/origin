@@ -7,10 +7,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.1.1-blue" alt="Version" />
   <img src="https://img.shields.io/badge/platform-Windows-lightgrey" alt="Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%202-orange" alt="Tauri" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License" />
+  <img src="https://github.com/Origin-AI-IDE/origin/actions/workflows/ci.yml/badge.svg" alt="CI" />
 </p>
 
 ---

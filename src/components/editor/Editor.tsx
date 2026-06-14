@@ -14,7 +14,6 @@ import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
 import { unifiedMergeView } from '@codemirror/merge';
 import { getLanguageExtension, languageLabel } from './languageSupport';
-import type { PatchResult } from '../../lib/patch';
 import { createLspExtension } from '../../lib/lspCm6';
 import { getLspLanguage } from '../../lib/lsp';
 import { useToast } from '../ui/Toast';
@@ -202,7 +201,6 @@ export interface DiffHunk {
 export interface EditorHandle {
   getEditorContext: () => EditorContext | null;
   showDiff: (newCode: string, originalContent?: string) => void;
-  showResolvedDiff: (result: PatchResult) => void;
   rejectDiff: () => void;
   undo: () => void;
   redo: () => void;
@@ -322,10 +320,6 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       setDiffPending(true);
     },
 
-    showResolvedDiff(result: PatchResult) {
-      if (result.merged_content == null) return;
-      this.showDiff(result.merged_content);
-    },
 
     rejectDiff() {
       handleRejectDiff();

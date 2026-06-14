@@ -3,7 +3,6 @@ mod fs;
 mod git;
 mod keychain;
 mod lsp;
-mod patch;
 mod search;
 mod system;
 mod terminal;
@@ -48,9 +47,6 @@ pub fn run() {
             ai::agent_bash_run,
             ai::ai_stream_proxy,
             ai::fetch_text,
-            patch::patch_apply_snippet,
-            patch::patch_replace_region,
-            patch::patch_delete_region,
             lsp::lsp_start,
             lsp::lsp_request,
             lsp::lsp_notify,

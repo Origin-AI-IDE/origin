@@ -30,7 +30,9 @@ pub async fn agent_bash_run(command: String, cwd: String) -> Result<BashResult, 
     #[cfg(windows)]
     let (shell, flag) = ("powershell.exe", "-Command");
     #[cfg(not(windows))]
-    let (shell, flag) = (std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()).as_str(), "-c");
+    let shell_str = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
+    #[cfg(not(windows))]
+    let (shell, flag) = (shell_str.as_str(), "-c");
 
     let out = tokio::task::spawn_blocking(move || {
         let mut cmd = std::process::Command::new(shell);
