@@ -18,6 +18,7 @@ export interface TerminalPanelHandle {
   addTab: () => void;
   clearActive: () => void;
   killActive: () => void;
+  runInNewTab: (command: string) => void;
 }
 
 interface Props {
@@ -51,7 +52,7 @@ function loadSavedTabs(defaultCwd: string): TermTab[] {
         return parsed.map((t, i) => ({ id: i + 1, name: t.name, cwd: t.cwd }));
       }
     }
-  } catch {}
+  } catch { /* stored tab state is missing or malformed — start fresh */ }
   return [{ id: 1, name: "1", cwd: defaultCwd }];
 }
 
@@ -125,6 +126,7 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
   });
   const nextId = useRef(initCounter(tabs));
   const [clearKeys, setClearKeys] = useState<Record<number, number>>({});
+  const [pendingInputs, setPendingInputs] = useState<Record<number, string>>({});
 
   // Rename state
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -141,6 +143,13 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
     killActive() {
       closeTab(activeId);
     },
+    runInNewTab(command: string) {
+      const id = nextId.current++;
+      const name = nextTabName(tabs);
+      setTabs((prev) => [...prev, { id, name, cwd }]);
+      setActiveId(id);
+      setPendingInputs(prev => ({ ...prev, [id]: command }));
+    },
   }));
 
   // ── Restore from durable store on first mount ────────────────────────────
@@ -155,7 +164,7 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
         }
       },
     );
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);  
 
   // ── Persist tab list whenever it changes ────────────────────────────────
   useEffect(() => {
@@ -399,7 +408,7 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
               pointerEvents: tab.id === activeId ? "auto" : "none",
             }}
           >
-            <TerminalInstance cwd={tab.cwd} active={tab.id === activeId} clearKey={clearKeys[tab.id] ?? 0} />
+            <TerminalInstance cwd={tab.cwd} active={tab.id === activeId} clearKey={clearKeys[tab.id] ?? 0} pendingInput={pendingInputs[tab.id]} />
           </div>
         ))}
       </div>

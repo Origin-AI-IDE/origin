@@ -17,7 +17,7 @@ export default function PlanCard({ plan, onApprove, onReject, status = "pending"
   const isDone = status !== "pending";
   const [expanded, setExpanded] = useState(!isDone);
 
-  const statusColor = status === "approved" ? "#22c55e" : "var(--origin-fg-subtle)";
+  const statusColor = status === "approved" ? "var(--origin-semantic-success)" : "var(--origin-fg-subtle)";
   const statusLabel = status === "approved" ? "approved" : "rejected";
 
   return (

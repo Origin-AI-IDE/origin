@@ -6,53 +6,10 @@ import { Tooltip } from "./ui/Tooltip";
 import DropdownMenu, { type MenuEntry } from "./ui/DropdownMenu";
 import StatusIsland from "./StatusIsland";
 import { useTheme } from "../themes/ThemeContext";
+import { useCommands } from "../context/CommandContext";
 import logoSrc from "../assets/origin-logo.svg";
 
 const win = getCurrentWindow();
-
-interface TitleBarProps {
-  sidebarOpen: boolean;
-  onToggleSidebar: () => void;
-  terminalOpen: boolean;
-  onToggleTerminal: () => void;
-  aiPanelOpen: boolean;
-  onToggleAiPanel: () => void;
-  onOpenFolder: () => void;
-  onOpenFile: () => void;
-  onNewFile: () => void;
-  onNewWindow: () => void;
-  onOpenPalette: () => void;
-  isFullscreen: boolean;
-  onToggleFullscreen: () => void;
-  gitBranch: string | null;
-  dirtyCount: number;
-  // File actions
-  onSave?: () => void;
-  onSaveAs?: () => void;
-  onSaveAll?: () => void;
-  onCloseEditor?: () => void;
-  onCloseFolder?: () => void;
-  hasActiveTab?: boolean;
-  hasFolderOpen?: boolean;
-  // Edit actions
-  onEditorUndo?: () => void;
-  onEditorRedo?: () => void;
-  onEditorCut?: () => void;
-  onEditorCopy?: () => void;
-  onEditorPaste?: () => void;
-  onEditorSelectAll?: () => void;
-  onEditorFind?: () => void;
-  // Zoom
-  onZoomIn?: () => void;
-  onZoomOut?: () => void;
-  onZoomReset?: () => void;
-  // Terminal
-  onNewTerminalTab?: () => void;
-  onClearTerminal?: () => void;
-  onKillTerminal?: () => void;
-  // Help
-  onAbout?: () => void;
-}
 
 function IconBtn({
   onClick,
@@ -128,22 +85,20 @@ function MenuButton({
 }
 
 
-export default function TitleBar({
-  sidebarOpen, onToggleSidebar,
-  terminalOpen, onToggleTerminal,
-  aiPanelOpen, onToggleAiPanel,
-  onOpenFolder, onOpenFile, onNewFile, onNewWindow,
-  onOpenPalette,
-  isFullscreen, onToggleFullscreen,
-  gitBranch, dirtyCount,
-  onSave, onSaveAs, onSaveAll, onCloseEditor, onCloseFolder,
-  hasActiveTab, hasFolderOpen,
-  onEditorUndo, onEditorRedo, onEditorCut, onEditorCopy, onEditorPaste, onEditorSelectAll, onEditorFind,
-  onZoomIn, onZoomOut, onZoomReset,
-  onNewTerminalTab, onClearTerminal, onKillTerminal,
-  onAbout,
-}: TitleBarProps) {
+export default function TitleBar() {
   const { theme } = useTheme();
+  const {
+    sidebarOpen, terminalOpen, aiPanelOpen,
+    onToggleSidebar, onToggleTerminal, onToggleAiPanel,
+    isFullscreen, onToggleFullscreen,
+    onOpenFolder, onOpenFile, onNewFile, onNewWindow, onOpenPalette,
+    gitBranch, dirtyCount, hasActiveTab, hasFolderOpen,
+    onSave, onSaveAs, onSaveAll, onCloseEditor, onCloseFolder,
+    onEditorUndo, onEditorRedo, onEditorCut, onEditorCopy, onEditorPaste, onEditorSelectAll, onEditorFind,
+    onZoomIn, onZoomOut, onZoomReset,
+    onNewTerminalTab, onClearTerminal, onKillTerminal,
+    onAbout,
+  } = useCommands();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const fileRef     = useRef<HTMLButtonElement>(null);
   const editRef     = useRef<HTMLButtonElement>(null);

@@ -7,7 +7,6 @@ import { getGitChanges, type GitChanges } from "../lib/git";
 import { getMemory, type MemoryInfo } from "../lib/system";
 import { readUsage, resetUsage, type UsageStore } from "../lib/usage";
 import { PROVIDERS } from "./ai/providers";
-import { useTheme } from "../themes/ThemeContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -34,7 +33,6 @@ interface PillProps {
   id:         CardId;
   badges:     BadgeMap;
   notifying:  boolean;
-  isDark:     boolean;
   task:       string | null;
   gitData:    GitChanges | null;
   gitBranch:  string | null;
@@ -66,9 +64,9 @@ function fmtCost(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-function PillContent({ id, badges, notifying, isDark, task, gitData, gitBranch, project, memory, usageData }: PillProps) {
+function PillContent({ id, badges, notifying, task, gitData, gitBranch, project, memory, usageData }: PillProps) {
   const hasBadge = (badges[id] ?? 0) > 0;
-  const notifyFg = isDark ? "#111111" : "#ffffff";
+  const notifyFg = "var(--origin-bg-base)";
   let icon: React.ReactNode;
   let text: string;
   let iconColor = notifying ? notifyFg : "var(--origin-fg-subtle)";
@@ -427,8 +425,6 @@ function CardBody({ id, task, onClearTask, onSetTask, gitData, gitBranch, projec
 
 export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: StatusIslandProps) {
   const { folderPath } = useWorkspace();
-  const { theme } = useTheme();
-  const isDark = theme.type === "dark";
   const project = folderPath ? (folderPath.split(/[\\/]/).filter(Boolean).pop() ?? "") : "";
 
   // ── Persistent state ────────────────────────────────────────────────────────
@@ -558,9 +554,9 @@ export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: Sta
 
   // ── Computed island styles ──────────────────────────────────────────────────
 
-  const notifyBg     = isDark ? "#ffffff"            : "#111111";
-  const notifyBorder = isDark ? "rgba(0,0,0,0.12)"  : "rgba(255,255,255,0.12)";
-  const notifyFg     = isDark ? "#111111"            : "#ffffff";
+  const notifyBg     = "var(--origin-fg-default)";
+  const notifyBorder = "color-mix(in srgb, var(--origin-bg-base) 12%, transparent)";
+  const notifyFg     = "var(--origin-bg-base)";
 
   const bgColor = notifying ? notifyBg
                : isOpen    ? "var(--origin-island-bg-open)"
@@ -582,7 +578,7 @@ export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: Sta
 
   // Shared data props passed to Pill and CardBody
   const dataProps     = { task, gitData, gitBranch, project, memory, usageData };
-  const pillDataProps = { ...dataProps, isDark };
+  const pillDataProps = { ...dataProps };
 
   return (
     <div
@@ -654,7 +650,7 @@ export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: Sta
           onClick={e => step(-1, e)}
           className="flex items-center justify-center border-none cursor-pointer"
           style={{ width: "26px", height: "20px", background: "none", color: navColor }}
-          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"; }}
+          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--origin-bg-hover)"; }}
           onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}
         >
           <ChevronLeft size={9} strokeWidth={2.5} />
@@ -663,7 +659,7 @@ export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: Sta
           onClick={e => step(1, e)}
           className="flex items-center justify-center border-none cursor-pointer"
           style={{ width: "26px", height: "20px", background: "none", color: navColor }}
-          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"; }}
+          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--origin-bg-hover)"; }}
           onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}
         >
           <ChevronRight size={9} strokeWidth={2.5} />

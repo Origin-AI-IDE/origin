@@ -15,6 +15,9 @@ import { tags as t } from '@lezer/highlight';
 import { unifiedMergeView } from '@codemirror/merge';
 import { getLanguageExtension, languageLabel } from './languageSupport';
 import type { PatchResult } from '../../lib/patch';
+import { createLspExtension } from '../../lib/lspCm6';
+import { getLspLanguage } from '../../lib/lsp';
+import { useToast } from '../ui/Toast';
 
 // ── Syntax token colors — all via CSS variables ────────────────────────────────
 
@@ -96,8 +99,8 @@ export const originBaseTheme = EditorView.theme({
     borderLeftWidth: '2px',
   },
   '&.cm-focused .cm-matchingBracket': {
-    backgroundColor: 'rgba(98,166,255,0.15)',
-    outline: '1px solid rgba(98,166,255,0.4)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-accent-blue) 15%, transparent)',
+    outline: '1px solid color-mix(in srgb, var(--origin-accent-blue) 40%, transparent)',
     borderRadius: '2px',
   },
   '.cm-tooltip': {
@@ -143,32 +146,32 @@ export const originBaseTheme = EditorView.theme({
   '.cm-button:hover': { background: 'var(--origin-bg-active)' },
   // ── Unified merge view (diff) ─────────────────────────────────────────────
   '.cm-deletedChunk': {
-    backgroundColor: 'rgba(218,54,51,0.14)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-semantic-error) 14%, transparent)',
   },
   '.cm-deletedChunk-gutter': {
-    backgroundColor: 'rgba(218,54,51,0.28)',
-    borderRight: '3px solid rgba(218,54,51,0.65)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-semantic-error) 28%, transparent)',
+    borderRight: '3px solid color-mix(in srgb, var(--origin-semantic-error) 65%, transparent)',
   },
   '.cm-changedChunk': {
-    backgroundColor: 'rgba(46,160,67,0.13)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-semantic-success) 13%, transparent)',
   },
   '.cm-changedChunk-gutter': {
-    backgroundColor: 'rgba(46,160,67,0.25)',
-    borderRight: '3px solid rgba(46,160,67,0.65)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-semantic-success) 25%, transparent)',
+    borderRight: '3px solid color-mix(in srgb, var(--origin-semantic-success) 65%, transparent)',
   },
   '.cm-insertedChunk': {
-    backgroundColor: 'rgba(46,160,67,0.13)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-semantic-success) 13%, transparent)',
   },
   '.cm-insertedChunk-gutter': {
-    backgroundColor: 'rgba(46,160,67,0.25)',
-    borderRight: '3px solid rgba(46,160,67,0.65)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-semantic-success) 25%, transparent)',
+    borderRight: '3px solid color-mix(in srgb, var(--origin-semantic-success) 65%, transparent)',
   },
   '.cm-deletedChunkField': {
-    backgroundColor: 'rgba(218,54,51,0.35)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-semantic-error) 35%, transparent)',
     borderRadius: '2px',
   },
   '.cm-changedChunkField': {
-    backgroundColor: 'rgba(46,160,67,0.35)',
+    backgroundColor: 'color-mix(in srgb, var(--origin-semantic-success) 35%, transparent)',
     borderRadius: '2px',
   },
   '.cm-collapsedLines': {
@@ -220,12 +223,16 @@ interface Props {
   onAddToAiContext?: (ctx: EditorContext) => void;
   onAcceptDiff?: () => void;
   onReady?: () => void;
+  // LSP props
+  rootPath?: string | null;
+  onDefinitionJump?: (filePath: string, line: number, col: number) => void;
+  onMissingServer?: (language: string, installCmd: string) => void;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { path, content, onChange, onCursorChange, initialCursor, jumpTo, onAddToAiContext, onAcceptDiff, onReady }, ref
+  { path, content, onChange, onCursorChange, initialCursor, jumpTo, onAddToAiContext, onAcceptDiff, onReady, rootPath, onDefinitionJump, onMissingServer }, ref
 ) {
   const containerRef   = useRef<HTMLDivElement>(null);
   const viewRef        = useRef<EditorView | null>(null);
@@ -236,6 +243,15 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   // One Compartment per editor instance — lets us swap in/out the merge extension.
   const mergeCompartment = useRef(new Compartment());
+  // LSP extensions compartment — reconfigured per file path
+  const lspCompartment = useRef(new Compartment());
+  // Stable ref so the LSP definition callback always sees the current value
+  const onDefinitionJumpRef = useRef(onDefinitionJump);
+  onDefinitionJumpRef.current = onDefinitionJump;
+  const onMissingServerRef = useRef(onMissingServer);
+  onMissingServerRef.current = onMissingServer;
+
+  const { showToast } = useToast();
 
   // Diff state
   const [diffPending, setDiffPending] = useState(false);
@@ -264,7 +280,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       const sel = state.selection.main;
       const filename = path.startsWith('__untitled__')
         ? 'Untitled'
-        : (path.split(/[\/\\]/).pop() ?? path);
+        : (path.split(/[/\\]/).pop() ?? path);
       const language = languageLabel(path);
 
       if (sel.from !== sel.to) {
@@ -325,8 +341,9 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       if (!view) return;
       const sel = view.state.selection.main;
       if (sel.from === sel.to) return;
-      navigator.clipboard.writeText(view.state.sliceDoc(sel.from, sel.to));
-      view.dispatch(view.state.replaceSelection(''));
+      navigator.clipboard.writeText(view.state.sliceDoc(sel.from, sel.to))
+        .then(() => { view.dispatch(view.state.replaceSelection('')); })
+        .catch(() => { showToast('Clipboard write failed', 'error'); });
     },
 
     copy() {
@@ -334,15 +351,16 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       if (!view) return;
       const sel = view.state.selection.main;
       if (sel.from === sel.to) return;
-      navigator.clipboard.writeText(view.state.sliceDoc(sel.from, sel.to));
+      navigator.clipboard.writeText(view.state.sliceDoc(sel.from, sel.to))
+        .catch(() => { showToast('Clipboard write failed', 'error'); });
     },
 
     paste() {
       const view = viewRef.current;
       if (!view) return;
-      navigator.clipboard.readText().then(text => {
-        view.dispatch(view.state.replaceSelection(text));
-      });
+      navigator.clipboard.readText()
+        .then(text => { view.dispatch(view.state.replaceSelection(text)); })
+        .catch(() => { showToast('Clipboard read failed', 'error'); });
     },
   }));
 
@@ -387,6 +405,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab, ...searchKeymap]),
         getLanguageExtension(path),
         mergeCompartment.current.of([]),
+        lspCompartment.current.of([]),
         originBaseTheme,
         EditorView.updateListener.of(update => {
           if (update.docChanged) {
@@ -440,6 +459,30 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpTo?.key]);
 
+  // LSP session — install extensions when a supported file is open in a workspace
+  useEffect(() => {
+    if (!rootPath || path.startsWith('__')) return;
+    if (!getLspLanguage(path)) return;
+
+    let cancelled = false;
+    createLspExtension({
+      filePath: path,
+      rootPath,
+      onDefinitionJump: (fp, ln, col) => onDefinitionJumpRef.current?.(fp, ln, col),
+      onMissingServer: (lang, cmd) => onMissingServerRef.current?.(lang, cmd),
+    }).then(exts => {
+      if (cancelled) return;
+      const v = viewRef.current;
+      if (v) v.dispatch({ effects: lspCompartment.current.reconfigure(exts) });
+    });
+
+    return () => {
+      cancelled = true;
+      const v = viewRef.current;
+      if (v) v.dispatch({ effects: lspCompartment.current.reconfigure([]) });
+    };
+  }, [path, rootPath]);
+
   function handleContextMenu(e: React.MouseEvent) {
     if (!onAddToAiContext) return;
     const view = viewRef.current;
@@ -448,7 +491,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     const sel = state.selection.main;
     if (sel.from === sel.to) return;
     e.preventDefault();
-    const filename  = path.startsWith('__untitled__') ? 'Untitled' : (path.split(/[\/\\]/).pop() ?? path);
+    const filename  = path.startsWith('__untitled__') ? 'Untitled' : (path.split(/[/\\]/).pop() ?? path);
     const startLine = state.doc.lineAt(sel.from).number;
     const endLine   = state.doc.lineAt(sel.to).number;
     setContextMenu({
@@ -502,15 +545,15 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
                 padding: '3px 11px',
                 borderRadius: 5,
                 border: 'none',
-                backgroundColor: 'rgb(35,134,54)',
+                backgroundColor: 'var(--origin-semantic-success)',
                 color: '#fff',
                 cursor: 'pointer',
                 fontSize: '11px',
                 fontFamily: 'var(--font-sans)',
                 fontWeight: 500,
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgb(46,160,67)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgb(35,134,54)'; }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'color-mix(in srgb, var(--origin-semantic-success) 80%, white)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--origin-semantic-success)'; }}
             >
               Accept
             </button>
@@ -520,15 +563,15 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
                 padding: '3px 11px',
                 borderRadius: 5,
                 border: 'none',
-                backgroundColor: 'rgb(218,54,51)',
+                backgroundColor: 'var(--origin-semantic-error)',
                 color: '#fff',
                 cursor: 'pointer',
                 fontSize: '11px',
                 fontFamily: 'var(--font-sans)',
                 fontWeight: 500,
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgb(248,81,73)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgb(218,54,51)'; }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'color-mix(in srgb, var(--origin-semantic-error) 80%, white)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--origin-semantic-error)'; }}
             >
               Reject
             </button>

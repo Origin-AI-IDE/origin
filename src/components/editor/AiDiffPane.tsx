@@ -91,10 +91,10 @@ export default function AiDiffPane({ tab, onClose }: Props) {
           style={{
             ...btnBase,
             background: 'transparent',
-            borderColor: 'rgba(218,54,51,0.4)',
-            color: 'rgba(218,54,51,0.9)',
+            borderColor: 'color-mix(in srgb, var(--origin-semantic-error) 40%, transparent)',
+            color: 'var(--origin-semantic-error)',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(218,54,51,0.08)'; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--origin-semantic-error) 8%, transparent)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
         >
           <X size={12} />
@@ -105,12 +105,12 @@ export default function AiDiffPane({ tab, onClose }: Props) {
           onClick={handleApprove}
           style={{
             ...btnBase,
-            background: 'rgba(46,160,67,0.12)',
-            borderColor: 'rgba(46,160,67,0.5)',
-            color: 'rgba(46,160,67,1)',
+            background: 'color-mix(in srgb, var(--origin-semantic-success) 12%, transparent)',
+            borderColor: 'color-mix(in srgb, var(--origin-semantic-success) 50%, transparent)',
+            color: 'var(--origin-semantic-success)',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(46,160,67,0.22)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(46,160,67,0.12)'; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--origin-semantic-success) 22%, transparent)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'color-mix(in srgb, var(--origin-semantic-success) 12%, transparent)'; }}
         >
           <Check size={12} />
           Accept

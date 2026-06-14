@@ -58,7 +58,7 @@ export default function ContextMenu({ x, y, items, onClose }: {
               display: 'flex', alignItems: 'center', gap: 8,
               width: '100%', padding: '5px 12px',
               border: 'none', background: 'transparent', cursor: 'pointer',
-              color: item.danger ? '#ef4444' : 'var(--origin-fg-default)',
+              color: item.danger ? 'var(--origin-semantic-error)' : 'var(--origin-fg-default)',
               textAlign: 'left', fontFamily: 'inherit', fontSize: 'inherit',
             }}
           >

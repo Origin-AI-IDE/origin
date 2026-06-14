@@ -168,8 +168,8 @@ function AIProvidersSection() {
                 </span>
                 {hasSaved && (
                   <div style={{ display: "flex", alignItems: "center", gap: "3px", marginTop: "1px" }}>
-                    <Check size={10} style={{ color: "#22c55e" }} />
-                    <span style={{ fontSize: "10px", color: "#22c55e" }}>Key saved</span>
+                    <Check size={10} style={{ color: "var(--origin-semantic-success)" }} />
+                    <span style={{ fontSize: "10px", color: "var(--origin-semantic-success)" }}>Key saved</span>
                   </div>
                 )}
               </div>
@@ -218,12 +218,12 @@ function AIProvidersSection() {
                     borderRadius: "6px",
                     border: "1px solid var(--origin-border-default)",
                     backgroundColor: state.justSaved
-                      ? "color-mix(in srgb, #22c55e 15%, transparent)"
+                      ? "color-mix(in srgb, var(--origin-semantic-success) 15%, transparent)"
                       : isDirty
                         ? "var(--origin-fg-default)"
                         : "transparent",
                     color: state.justSaved
-                      ? "#22c55e"
+                      ? "var(--origin-semantic-success)"
                       : isDirty
                         ? "var(--origin-bg-base)"
                         : "var(--origin-fg-subtle)",
@@ -413,12 +413,12 @@ function SystemPromptSection() {
             borderRadius: "6px",
             border: "1px solid var(--origin-border-default)",
             backgroundColor: justSaved
-              ? "color-mix(in srgb, #22c55e 15%, transparent)"
+              ? "color-mix(in srgb, var(--origin-semantic-success) 15%, transparent)"
               : isDirty
                 ? "var(--origin-fg-default)"
                 : "transparent",
             color: justSaved
-              ? "#22c55e"
+              ? "var(--origin-semantic-success)"
               : isDirty
                 ? "var(--origin-bg-base)"
                 : "var(--origin-fg-subtle)",

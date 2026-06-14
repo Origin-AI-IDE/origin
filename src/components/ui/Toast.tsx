@@ -5,13 +5,19 @@ import { XCircle } from 'lucide-react';
 
 type ToastType = 'info' | 'success' | 'error';
 
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface ToastState {
   text: string;
   type: ToastType;
+  action?: ToastAction;
 }
 
 interface ToastCtx {
-  showToast: (text: string, type?: ToastType) => void;
+  showToast: (text: string, type?: ToastType, action?: ToastAction) => void;
 }
 
 // ── Context ───────────────────────────────────────────────────────────────────
@@ -36,10 +42,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState<ToastState | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function showToast(text: string, type: ToastType = 'info') {
+  function showToast(text: string, type: ToastType = 'info', action?: ToastAction) {
     if (timer.current) clearTimeout(timer.current);
-    setToast({ text, type });
-    timer.current = setTimeout(() => setToast(null), AUTO_DISMISS_MS);
+    setToast({ text, type, action });
+    // Action toasts stay until the user clicks the action or dismisses manually
+    if (!action) {
+      timer.current = setTimeout(() => setToast(null), AUTO_DISMISS_MS);
+    }
   }
 
   function dismiss() {
@@ -70,10 +79,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             fontSize: 12,
             fontFamily: 'var(--font-sans)',
             boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
-            whiteSpace: 'pre-wrap',
+            whiteSpace: 'normal',
           }}
         >
           <span style={{ flex: 1 }}>{toast.text}</span>
+          {toast.action && (
+            <button
+              onClick={() => { toast.action!.onClick(); dismiss(); }}
+              style={{
+                flexShrink: 0, background: 'var(--origin-bg-hover)',
+                border: '1px solid var(--origin-border-default)',
+                borderRadius: 5, cursor: 'pointer', padding: '3px 10px',
+                color: 'var(--origin-fg-default)', fontSize: 11,
+                fontFamily: 'var(--font-sans)', fontWeight: 500,
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--origin-bg-active)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--origin-bg-hover)'; }}
+            >
+              {toast.action.label}
+            </button>
+          )}
           <button
             onClick={dismiss}
             style={{

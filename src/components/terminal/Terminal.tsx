@@ -16,6 +16,7 @@ interface Props {
   cwd: string;
   active: boolean;
   clearKey?: number;
+  pendingInput?: string;
 }
 
 function cssVar(name: string): string {
@@ -48,7 +49,7 @@ function buildTheme() {
   };
 }
 
-export default function Terminal({ cwd, active, clearKey }: Props) {
+export default function Terminal({ cwd, active, clearKey, pendingInput }: Props) {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef    = useRef<XTerm | null>(null);
@@ -95,6 +96,10 @@ export default function Terminal({ cwd, active, clearKey }: Props) {
         cleanupExit = await onTerminalExit(id, () => {
           xterm.write("\r\n\x1b[90m[process exited]\x1b[0m\r\n");
         });
+        // pendingInput is captured from props at mount time (effect deps are intentionally [])
+        if (pendingInput) {
+          terminalWrite(id, pendingInput + '\r').catch(() => {});
+        }
       })
       .catch((err: unknown) => {
         xterm.write(`\r\n\x1b[31mFailed to start terminal: ${String(err)}\x1b[0m\r\n`);

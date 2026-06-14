@@ -1,6 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { invoke } from "@tauri-apps/api/core";
+import { resolvePath } from "../resolvePath";
+import { applyEdit } from "../applyEdit";
 
 // ── Pending action descriptors ─────────────────────────────────────────────────
 
@@ -14,23 +16,6 @@ export interface ApprovalEvent {
   action:  PendingAction;
   approve: () => void;
   reject:  () => void;
-}
-
-// ── Path resolution ────────────────────────────────────────────────────────────
-
-// Resolve a potentially-relative path against the workspace root.
-// The model sometimes generates relative paths (e.g. "src/foo.ts") instead of
-// absolute Windows paths. We join them with folderPath so Rust can find them.
-function resolvePath(p: string, base: string): string {
-  const trimmed = p.trim();
-  // Already absolute: Windows drive (C:\ or C:/), UNC (\\), or Unix (/)
-  if (/^[A-Za-z]:[/\\]/.test(trimmed) || trimmed.startsWith('/') || trimmed.startsWith('\\\\')) {
-    return trimmed;
-  }
-  // Relative — join with workspace root, normalise separators to match the base
-  const root = base.replace(/[/\\]+$/, '');
-  const sep  = root.includes('\\') ? '\\' : '/';
-  return root + sep + trimmed.replace(/[/\\]/g, sep);
 }
 
 // ── Tool factory ───────────────────────────────────────────────────────────────
@@ -53,7 +38,7 @@ export function createTools(opts: {
       execute: async ({ path }) => {
         const resolved = resolvePath(path, folderPath);
         try {
-          const content = await invoke<string>("read_file", { path: resolved });
+          const content = await invoke<string>("read_file", { path: resolved, workspaceRoot: folderPath });
           return { content };
         } catch (e) {
           return { error: String(e) };
@@ -130,7 +115,7 @@ export function createTools(opts: {
         // Read the current file so the diff can show what changes
         let originalContent = "";
         try {
-          originalContent = await invoke<string>("read_file", { path: resolved });
+          originalContent = await invoke<string>("read_file", { path: resolved, workspaceRoot: folderPath });
         } catch {
           // New file — original is empty
         }
@@ -140,7 +125,7 @@ export function createTools(opts: {
             action: { type: "write_file", path: resolved, content, originalContent },
             approve: async () => {
               try {
-                await invoke("write_file", { path: resolved, content });
+                await invoke("write_file", { path: resolved, content, workspaceRoot: folderPath });
                 resolve({ success: true, path: resolved });
               } catch (e) {
                 resolve({ error: String(e) });
@@ -166,7 +151,7 @@ export function createTools(opts: {
         const resolved = resolvePath(path, folderPath);
         let fileContent: string;
         try {
-          fileContent = await invoke<string>("read_file", { path: resolved });
+          fileContent = await invoke<string>("read_file", { path: resolved, workspaceRoot: folderPath });
         } catch (e) {
           return { error: `Cannot read file: ${String(e)}` };
         }
@@ -182,7 +167,7 @@ export function createTools(opts: {
             action: { type: "edit", path: resolved, original, updated, mergedContent, originalContent: fileContent },
             approve: async () => {
               try {
-                await invoke("write_file", { path: resolved, content: mergedContent });
+                await invoke("write_file", { path: resolved, content: mergedContent, workspaceRoot: folderPath });
                 resolve({ success: true, path: resolved });
               } catch (e) {
                 resolve({ error: String(e) });
@@ -232,17 +217,3 @@ export function createReadOnlyTools(opts: { folderPath: string }) {
   return { read_file: all.read_file, list_directory: all.list_directory, grep: all.grep, glob: all.glob };
 }
 
-// ── SEARCH/REPLACE apply ───────────────────────────────────────────────────────
-
-function applyEdit(fileContent: string, original: string, updated: string): string | null {
-  const idx = fileContent.indexOf(original);
-  if (idx !== -1) {
-    return fileContent.slice(0, idx) + updated + fileContent.slice(idx + original.length);
-  }
-  const trimmed = original.trim();
-  const tidx = fileContent.indexOf(trimmed);
-  if (tidx !== -1) {
-    return fileContent.slice(0, tidx) + updated + fileContent.slice(tidx + trimmed.length);
-  }
-  return null;
-}

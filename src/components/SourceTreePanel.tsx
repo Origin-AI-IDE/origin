@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { useTheme } from '../themes/ThemeContext';
 import { useToast } from './ui/Toast';
 import {
   getStatusFiles, getGitLogFull, gitCommit, gitCommitPush,
@@ -43,7 +42,6 @@ const RAIL_L  = ROW_PL + DOT_W / 2; // = 14
 
 export default function SourceTreePanel() {
   const { folderPath } = useWorkspace();
-  const { theme } = useTheme();
   const [files, setFiles]       = useState<StatusFile[]>([]);
   const [history, setHistory]   = useState<FullCommitEntry[]>([]);
   const [title, setTitle]       = useState('');
@@ -188,8 +186,8 @@ export default function SourceTreePanel() {
             style={{
               flex: 1.5, padding: '5px 0', borderRadius: 5, border: 'none',
               cursor: canCommit ? 'pointer' : 'not-allowed',
-              background: canCommit ? (theme.type === 'dark' ? '#166534' : '#22c55e') : 'var(--origin-bg-hover)',
-              color: canCommit ? '#fff' : 'var(--origin-fg-subtle)',
+              background: canCommit ? 'var(--origin-semantic-success)' : 'var(--origin-bg-hover)',
+              color: canCommit ? '#ffffff' : 'var(--origin-fg-subtle)',
               fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-sans)',
               transition: 'opacity 0.15s',
             }}
