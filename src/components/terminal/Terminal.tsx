@@ -105,7 +105,7 @@ export default function Terminal({ cwd, active, clearKey, pendingInput }: Props)
         xterm.write(`\r\n\x1b[31mFailed to start terminal: ${String(err)}\x1b[0m\r\n`);
       });
 
-    const dataDisposable = xterm.onData((data) => {
+    const dataDisposable = xterm.onData((data: string) => {
       if (termIdRef.current !== null) {
         terminalWrite(termIdRef.current, data).catch(() => {});
       }

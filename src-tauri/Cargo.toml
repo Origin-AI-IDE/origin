@@ -30,7 +30,6 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "process",
 sysinfo = "0.30"
 reqwest = { version = "0.12", features = ["json"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
-patch-engine = { path = "../../tools/patch-engine" }
 
 [profile.release]
 opt-level   = "z"      # optimize for size (not speed)

@@ -41,6 +41,8 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "^2.4.0",
     "@tauri-apps/plugin-store": "^2.4.3",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "ai": "^6.0.204",
     "codemirror-languageserver": "^1.22.0",
     "geist": "^1.7.2",
