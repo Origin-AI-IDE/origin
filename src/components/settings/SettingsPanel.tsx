@@ -4,14 +4,14 @@ import { X, Eye, EyeOff, Bot, Palette, Check, MessageSquareDot } from "lucide-re
 import { PROVIDERS } from "../ai/providers";
 import { loadApiKey, saveApiKey, deleteApiKey } from "../../lib/secrets";
 import { useTheme } from "../../themes/ThemeContext";
-import { DEFAULT_SYSTEM_PROMPT } from "../../lib/ai";
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ASK_PROMPT, DEFAULT_PLAN_PROMPT } from "../../lib/ai";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const LOCAL_IDS = new Set(["ollama", "lmstudio", "vllm"]);
 const API_PROVIDERS = PROVIDERS.filter(p => !LOCAL_IDS.has(p.id));
 
-type Section = "ai" | "prompt" | "appearance";
+type Section = "ai" | "prompts" | "appearance";
 
 // ── Nav ──────────────────────────────────────────────────────────────────────
 
@@ -335,35 +335,61 @@ function AppearanceSection() {
   );
 }
 
-// ── System Prompt Section ────────────────────────────────────────────────────
+// ── Prompts Section ──────────────────────────────────────────────────────────
 
-function SystemPromptSection() {
-  const [value, setValue] = useState(
-    () => localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT
-  );
-  const [original, setOriginal] = useState(
-    () => localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT
-  );
+type PromptTab = "agent" | "ask" | "plan";
+
+const PROMPT_CONFIGS: Record<PromptTab, { label: string; storageKey: string; defaultValue: string; description: string }> = {
+  agent: {
+    label: "Agent",
+    storageKey: "origin-ai-system-prompt",
+    defaultValue: DEFAULT_SYSTEM_PROMPT,
+    description: "Used in Agent mode. Full tool access — read, write, edit, bash.",
+  },
+  ask: {
+    label: "Ask",
+    storageKey: "origin-ai-ask-prompt",
+    defaultValue: DEFAULT_ASK_PROMPT,
+    description: "Used in Ask mode. Can call edit / multi_edit; changes go through the diff view.",
+  },
+  plan: {
+    label: "Plan",
+    storageKey: "origin-ai-plan-prompt",
+    defaultValue: DEFAULT_PLAN_PROMPT,
+    description: "Used in Plan mode Phase 1 (exploration) and drives the structured plan format.",
+  },
+};
+
+function PromptEditor({ tab }: { tab: PromptTab }) {
+  const cfg = PROMPT_CONFIGS[tab];
+  const [value, setValue] = useState(() => localStorage.getItem(cfg.storageKey) ?? cfg.defaultValue);
+  const [saved, setSaved] = useState(() => localStorage.getItem(cfg.storageKey) ?? cfg.defaultValue);
   const [justSaved, setJustSaved] = useState(false);
 
-  const isDirty = value !== original;
-  const isDefault = value.trim() === DEFAULT_SYSTEM_PROMPT.trim();
+  useEffect(() => {
+    const stored = localStorage.getItem(cfg.storageKey) ?? cfg.defaultValue;
+    setValue(stored);
+    setSaved(stored);
+  }, [cfg.storageKey, cfg.defaultValue]);
+
+  const isDirty = value !== saved;
+  const isDefault = value.trim() === cfg.defaultValue.trim();
 
   function handleSave() {
     if (isDefault) {
-      localStorage.removeItem("origin-ai-system-prompt");
+      localStorage.removeItem(cfg.storageKey);
     } else {
-      localStorage.setItem("origin-ai-system-prompt", value);
+      localStorage.setItem(cfg.storageKey, value);
     }
-    setOriginal(value);
+    setSaved(value);
     setJustSaved(true);
     setTimeout(() => setJustSaved(false), 1800);
   }
 
   return (
-    <div style={{ padding: "2px 0 16px" }}>
-      <p style={{ fontSize: "12px", color: "var(--origin-fg-muted)", marginBottom: "16px", lineHeight: 1.6 }}>
-        Sent at the start of every conversation to guide the AI's behavior. Changes take effect on the next message sent.
+    <div>
+      <p style={{ fontSize: "12px", color: "var(--origin-fg-muted)", marginBottom: "12px", lineHeight: 1.6 }}>
+        {cfg.description} Changes take effect on the next message sent.
       </p>
       <textarea
         value={value}
@@ -371,7 +397,7 @@ function SystemPromptSection() {
         spellCheck={false}
         style={{
           width: "100%",
-          minHeight: "130px",
+          minHeight: "200px",
           padding: "10px 12px",
           borderRadius: "8px",
           border: "1px solid var(--origin-border-default)",
@@ -390,16 +416,14 @@ function SystemPromptSection() {
       />
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px" }}>
         <button
-          onClick={() => setValue(DEFAULT_SYSTEM_PROMPT)}
+          onClick={() => setValue(cfg.defaultValue)}
           disabled={isDefault}
           style={{
-            padding: "5px 12px",
-            borderRadius: "6px",
+            padding: "5px 12px", borderRadius: "6px",
             border: "1px solid var(--origin-border-default)",
             backgroundColor: "transparent",
             color: isDefault ? "var(--origin-fg-subtle)" : "var(--origin-fg-muted)",
-            fontSize: "12px",
-            cursor: isDefault ? "default" : "pointer",
+            fontSize: "12px", cursor: isDefault ? "default" : "pointer",
           }}
         >
           Reset to Default
@@ -409,29 +433,57 @@ function SystemPromptSection() {
           onClick={handleSave}
           disabled={!isDirty}
           style={{
-            padding: "5px 16px",
-            borderRadius: "6px",
+            padding: "5px 16px", borderRadius: "6px",
             border: "1px solid var(--origin-border-default)",
             backgroundColor: justSaved
               ? "color-mix(in srgb, var(--origin-semantic-success) 15%, transparent)"
-              : isDirty
-                ? "var(--origin-fg-default)"
-                : "transparent",
+              : isDirty ? "var(--origin-fg-default)" : "transparent",
             color: justSaved
               ? "var(--origin-semantic-success)"
-              : isDirty
-                ? "var(--origin-bg-base)"
-                : "var(--origin-fg-subtle)",
-            fontSize: "12px",
-            fontWeight: 500,
+              : isDirty ? "var(--origin-bg-base)" : "var(--origin-fg-subtle)",
+            fontSize: "12px", fontWeight: 500,
             cursor: isDirty ? "pointer" : "default",
-            transition: "all 0.15s",
-            minWidth: 56,
+            transition: "all 0.15s", minWidth: 56,
           }}
         >
           {justSaved ? "Saved!" : "Save"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function PromptsSection() {
+  const [tab, setTab] = useState<PromptTab>("agent");
+  const tabs: PromptTab[] = ["agent", "ask", "plan"];
+
+  return (
+    <div style={{ padding: "2px 0 16px" }}>
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: "4px", marginBottom: "16px" }}>
+        {tabs.map(t => {
+          const active = t === tab;
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                padding: "4px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: active ? 500 : 400,
+                border: "1px solid",
+                borderColor: active ? "var(--origin-fg-muted)" : "var(--origin-border-default)",
+                backgroundColor: active ? "var(--origin-bg-hover)" : "transparent",
+                color: active ? "var(--origin-fg-default)" : "var(--origin-fg-muted)",
+                cursor: "pointer", transition: "all 0.1s",
+              }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = "var(--origin-bg-hover)"; }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = "transparent"; }}
+            >
+              {PROMPT_CONFIGS[t].label}
+            </button>
+          );
+        })}
+      </div>
+      <PromptEditor key={tab} tab={tab} />
     </div>
   );
 }
@@ -443,7 +495,7 @@ interface SettingsPanelProps {
 }
 
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
-  const [section, setSection] = useState<Section>("ai");
+  const [section, setSection] = useState<Section>("prompts");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -534,10 +586,10 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               onClick={() => setSection("ai")}
             />
             <NavItem
-              active={section === "prompt"}
+              active={section === "prompts"}
               icon={<MessageSquareDot size={14} />}
-              label="System Prompt"
-              onClick={() => setSection("prompt")}
+              label="System Prompts"
+              onClick={() => setSection("prompts")}
             />
             <NavItem
               active={section === "appearance"}
@@ -554,10 +606,10 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               color: "var(--origin-fg-default)",
               marginBottom: "14px",
             }}>
-              {section === "ai" ? "AI Providers" : section === "prompt" ? "System Prompt" : "Appearance"}
+              {section === "ai" ? "AI Providers" : section === "prompts" ? "System Prompts" : "Appearance"}
             </div>
             {section === "ai"         && <AIProvidersSection />}
-            {section === "prompt"     && <SystemPromptSection />}
+            {section === "prompts"    && <PromptsSection />}
             {section === "appearance" && <AppearanceSection />}
           </div>
         </div>

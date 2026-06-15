@@ -80,7 +80,12 @@ export function useTabs() {
   }) {
     const tabPath  = `__diff__${data.approvalId}`;
     const fileName = data.filePath.split(/[\\/]/).filter(Boolean).pop() ?? data.filePath;
-    const approveAndRefresh = () => { data.approve(); setFileTreeVersion(v => v + 1); };
+    const approveAndRefresh = () => {
+      data.approve();
+      setFileContents(prev => ({ ...prev, [data.filePath]: data.proposedContent }));
+      setTabs(prev => prev.map(t => t.path === data.filePath ? { ...t, isDirty: false } : t));
+      setFileTreeVersion(v => v + 1);
+    };
     setTabs(prev => prev.find(t => t.path === tabPath) ? prev : [...prev, {
       path: tabPath,
       name: `${fileName} (diff)`,

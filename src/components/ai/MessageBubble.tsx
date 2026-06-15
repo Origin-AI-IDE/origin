@@ -17,7 +17,7 @@ export default function MessageBubble({
   folderPath,
   onApplyCode,
   getOpenTabPaths,
-  onResolveFail,
+  onResolveFail: _onResolveFail,
   onPin,
   onPlanApprove,
   onPlanReject,
@@ -58,8 +58,9 @@ export default function MessageBubble({
       filePath, message.fileMentions, message.sourceFilePath,
       folderPath ?? "", getOpenTabPaths?.() ?? [],
     );
-    if (!resolved) { onResolveFail?.(); return; }
-    onApplyCode(code, resolved, message.editorContext ?? undefined);
+    // Fall back to active file rather than failing silently — handleApplyCode
+    // uses activeTabRef.current when filePath is undefined.
+    onApplyCode(code, resolved ?? undefined, message.editorContext ?? undefined);
   };
 
   return (

@@ -14,8 +14,13 @@ function findFilePathFor(rawContent: string, code: string): string | undefined {
   const idx = rawContent.indexOf(code);
   if (idx === -1) return undefined;
   const before = rawContent.slice(0, idx);
-  const m = /(?:\/\/|#) file: ([^\n]+)\n```\w*\n?\s*$/.exec(before);
-  return m ? m[1].trim() : undefined;
+  // Allow optional blank lines / whitespace between the comment and the opening fence
+  const m = /(?:\/\/|#) file: ([^\n]+)\n\s*```\w*\n?\s*$/.exec(before);
+  if (m) return m[1].trim();
+  // Also handle: comment is the very first line inside the code block
+  const firstLine = code.split("\n")[0] ?? "";
+  const m2 = /^(?:\/\/|#) file: (.+)$/.exec(firstLine.trim());
+  return m2 ? m2[1].trim() : undefined;
 }
 
 function CodeBlock({

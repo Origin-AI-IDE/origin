@@ -55,6 +55,7 @@ function App() {
   const editorRef      = useRef<EditorHandle>(null);
   const terminalRef    = useRef<TerminalPanelHandle>(null);
   const pendingDiffRef = useRef<{ code: string; targetPath: string } | null>(null);
+  const [pendingDiffTick, setPendingDiffTick] = useState(0);
   const [_zoom,          setZoom]          = useState(1.0);
   const [pinnedContext,  setPinnedContext]  = useState<EditorContext | null>(null);
   const [cursorPositions, setCursorPositions] = useState<Record<string, { line: number; col: number }>>({});
@@ -93,7 +94,10 @@ function App() {
     };
   }, []);
 
-  // Apply a queued diff once the target tab is active and its content is loaded
+  // Apply a queued diff once the target tab is active and its content is loaded.
+  // pendingDiffTick is incremented whenever a new pending diff is enqueued so the
+  // effect fires even when activeTab and fileContents haven't changed (already-active
+  // tab edge case where editorRef.current was transiently null at enqueue time).
   useEffect(() => {
     const pending = pendingDiffRef.current;
     if (!pending) return;
@@ -102,7 +106,7 @@ function App() {
     if (!editorRef.current) return;
     pendingDiffRef.current = null;
     editorRef.current.showDiff(pending.code, fileContents[pending.targetPath]);
-  }, [activeTab, fileContents]);
+  }, [activeTab, fileContents, pendingDiffTick]);
 
   const { isFullscreen, toggleFullscreen } = useGlobalKeybindings({
     saveActive:     () => { if (activeTab) handleSave(activeTab); },
@@ -147,6 +151,7 @@ function App() {
     } else {
       pendingDiffRef.current = { code, targetPath };
       openTab(targetPath);
+      setPendingDiffTick(v => v + 1);
     }
   }
 
@@ -335,6 +340,7 @@ function App() {
                   onForcedContextConsumed={() => setPinnedContext(null)}
                   onApplyCode={handleApplyCode}
                   getOpenTabPaths={() => tabs.map(t => t.path)}
+                  getFileContents={() => fileContentsRef.current}
                   onOpenDiffTab={openAiDiffTab}
                 />
               )}

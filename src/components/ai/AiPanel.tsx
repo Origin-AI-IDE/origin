@@ -10,13 +10,13 @@ import ChatBox from "./ChatBox";
 import MessageBubble from "./MessageBubble";
 import MarkdownMessage from "./MarkdownMessage";
 import { PROVIDERS } from "./providers";
-import { DEFAULT_SYSTEM_PROMPT, type UsageData } from "../../lib/ai";
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ASK_PROMPT, DEFAULT_PLAN_PROMPT, type UsageData } from "../../lib/ai";
 import { ensurePricing, computeCost } from "../../lib/pricing";
 import { recordUsage } from "../../lib/usage";
 import { loadApiKey } from "../../lib/secrets";
 import { readFile } from "../../lib/fs";
 import { buildLanguageModel } from "../../lib/agent/providers";
-import { createTools, createReadOnlyTools } from "../../lib/agent/tools";
+import { createTools, createReadOnlyTools, createAskTools } from "../../lib/agent/tools";
 import { runAgent, type AgentEvent } from "../../lib/agent/run";
 import { parsePlan } from "../../lib/agent/planTypes";
 import type { ModelMessage } from "ai";
@@ -259,7 +259,7 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function buildContextPrefix(ctx: EditorContext): string {
+function buildContextPrefix(ctx: EditorContext, displayPath?: string): string {
   const ext = ctx.filename.split(".").pop()?.toLowerCase() ?? "";
   const fenceMap: Record<string, string> = {
     ts: "ts", tsx: "tsx", js: "js", jsx: "jsx", rs: "rs",
@@ -267,34 +267,15 @@ function buildContextPrefix(ctx: EditorContext): string {
   };
   const fence = fenceMap[ext] ?? ext;
   const label = ctx.type === "selection" ? "Selected code" : "Visible code";
-  return `[${label} in ${ctx.filename}]\n\`\`\`${fence}\n${ctx.code}\n\`\`\`\n\n`;
+  return `[${label} in ${displayPath ?? ctx.filename}]\n\`\`\`${fence}\n${ctx.code}\n\`\`\`\n\n`;
 }
 
-// ── Plan mode system prompt ────────────────────────────────────────────────────
+function toWorkspaceRelPath(fullPath: string, folderPath: string): string {
+  const fpNorm = folderPath.replace(/\\/g, "/").replace(/\/$/, "") + "/";
+  const spNorm = fullPath.replace(/\\/g, "/");
+  return spNorm.startsWith(fpNorm) ? spNorm.slice(fpNorm.length) : spNorm.split("/").pop() ?? fullPath;
+}
 
-const PLAN_SYSTEM_PROMPT = `You are Origin AI in PLAN mode. Your job is to analyze the codebase and produce a structured implementation plan — without writing any code yet.
-
-PHASE 1 — EXPLORATION & PLANNING:
-- Use read_file, list_directory, grep, and glob tools to explore the relevant files
-- Understand the structure, patterns, and what needs to change
-- DO NOT use write_file, edit, or bash_run — exploration only in this phase
-
-After exploring, write a brief analysis of what needs to change, then output your plan in EXACTLY this format:
-
-<origin-plan>
-<title>Brief task title (under 60 chars)</title>
-<steps>
-<step file="src/relative/path/to/file.ts" action="edit">Description of what will be changed and why</step>
-<step file="src/relative/path/to/newfile.ts" action="create">Description of what this new file will contain</step>
-</steps>
-</origin-plan>
-
-Rules:
-- Valid actions: edit, create, delete
-- Use workspace-relative paths (e.g. src/components/App.tsx)
-- Be specific in step descriptions — the user reads them before approving
-- Include ALL files that need changes
-- Stop after the closing </origin-plan> tag — do not execute any changes`;
 
 // ── Panel constants ────────────────────────────────────────────────────────────
 
@@ -324,6 +305,7 @@ interface AiPanelProps {
   onForcedContextConsumed?: () => void;
   onApplyCode?: (code: string, filePath?: string, ctx?: EditorContext) => void;
   getOpenTabPaths?: () => string[];
+  getFileContents?: () => Record<string, string>;
   onOpenDiffTab?: (data: AiDiffTabInput) => void;
 }
 
@@ -367,7 +349,7 @@ function buildModelHistory(messages: DisplayMessage[]): ModelMessage[] {
 
 export default function AiPanel({
   getEditorContext, getActiveFilePath, forcedContext, onForcedContextConsumed,
-  onApplyCode, getOpenTabPaths, onOpenDiffTab,
+  onApplyCode, getOpenTabPaths, getFileContents, onOpenDiffTab,
 }: AiPanelProps) {
   const { folderPath } = useWorkspace();
 
@@ -580,7 +562,8 @@ export default function AiPanel({
     // ── Build enriched message for the API ──────────────────────────────────
     let apiText = text;
     if (editorContext && editorContext.code.trim()) {
-      apiText = buildContextPrefix(editorContext) + apiText;
+      const relPath = sourceFilePath ? toWorkspaceRelPath(sourceFilePath, fp) : undefined;
+      apiText = buildContextPrefix(editorContext, relPath) + apiText;
     }
     for (const filepath of fileMentions) {
       try {
@@ -606,12 +589,14 @@ export default function AiPanel({
     setMessages(prev => [
       ...prev,
       userMsg,
-      { role: "assistant", content: "", streaming: true, parts: [] },
+      { role: "assistant", content: "", streaming: true, parts: [], sourceFilePath: userMsg.sourceFilePath },
     ]);
     setChatView("chat");
     localStorage.setItem("origin-ai-chat-view", "chat");
 
-    const systemPrompt = localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT;
+    const systemPrompt    = localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT;
+    const askSystemPrompt = localStorage.getItem("origin-ai-ask-prompt")    ?? DEFAULT_ASK_PROMPT;
+    const planSystemPrompt = localStorage.getItem("origin-ai-plan-prompt")  ?? DEFAULT_PLAN_PROMPT;
 
     // ── Event handler ────────────────────────────────────────────────────────
     const handleEvent = (event: AgentEvent) => {
@@ -860,7 +845,17 @@ export default function AiPanel({
       };
 
       const readOnlyTools = createReadOnlyTools({ folderPath: fp || "." });
-      const { cancel } = runAgent({ model, messages: modelMessages, tools: readOnlyTools, systemPrompt: PLAN_SYSTEM_PROMPT, onEvent: handleEvent });
+      const { cancel } = runAgent({ model, messages: modelMessages, tools: readOnlyTools, systemPrompt: planSystemPrompt, onEvent: handleEvent });
+      streamCleanupRef.current = cancel;
+    } else if (mode === "ask") {
+      const askTools = createAskTools({
+        folderPath: fp || ".",
+        getFileContents: getFileContents ?? (() => ({})),
+        onShowDiff: (path, _original, patched) => {
+          onApplyCodeRef.current?.(patched, path, undefined);
+        },
+      });
+      const { cancel } = runAgent({ model, messages: modelMessages, tools: askTools, systemPrompt: askSystemPrompt, onEvent: handleEvent });
       streamCleanupRef.current = cancel;
     } else {
       const { cancel } = runAgent({ model, messages: modelMessages, tools: makeFullTools(), systemPrompt, onEvent: handleEvent });

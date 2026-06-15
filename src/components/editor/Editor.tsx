@@ -13,6 +13,7 @@ import {
 import { openSearchPanel, search, searchKeymap } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
 import { unifiedMergeView } from '@codemirror/merge';
+import { createHunkControls } from '../../lib/hunkControls';
 import { getLanguageExtension, languageLabel } from './languageSupport';
 import { createLspExtension } from '../../lib/lspCm6';
 import { getLspLanguage } from '../../lib/lsp';
@@ -251,6 +252,13 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
 
   const { showToast } = useToast();
 
+  // Keep onAcceptDiff prop current so the hunk plugin callback never goes stale.
+  const onAcceptDiffRef = useRef(onAcceptDiff);
+  onAcceptDiffRef.current = onAcceptDiff;
+
+  // Stable indirection into handleAcceptDiff for createHunkControls.
+  const hunkAllResolvedRef = useRef<() => void>(() => {});
+
   // Diff state
   const [diffPending, setDiffPending] = useState(false);
   const diffOriginalRef = useRef<string>('');
@@ -305,16 +313,18 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       const original = originalContent !== undefined ? originalContent : view.state.doc.toString();
       diffOriginalRef.current = original;
 
-      // Atomically: replace the document + enable the merge extension.
+      // Atomically: replace the document + enable the merge extension + per-hunk controls.
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: newCode },
-        effects: mergeCompartment.current.reconfigure(
+        effects: mergeCompartment.current.reconfigure([
           unifiedMergeView({
             original,
             highlightChanges: true,
             collapseUnchanged: { margin: 3, minSize: 4 },
-          })
-        ),
+            mergeControls: false,
+          }),
+          createHunkControls(() => hunkAllResolvedRef.current()),
+        ]),
       });
 
       setDiffPending(true);
@@ -365,8 +375,11 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     });
     setDiffPending(false);
     diffOriginalRef.current = '';
-    onAcceptDiff?.();
+    onAcceptDiffRef.current?.();
   }
+
+  // Keep hunkAllResolvedRef pointing at the latest handleAcceptDiff on every render.
+  hunkAllResolvedRef.current = handleAcceptDiff;
 
   function handleRejectDiff() {
     const view = viewRef.current;
@@ -549,7 +562,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'color-mix(in srgb, var(--origin-semantic-success) 80%, white)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--origin-semantic-success)'; }}
             >
-              Accept
+              Accept All
             </button>
             <button
               onClick={handleRejectDiff}
@@ -567,7 +580,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'color-mix(in srgb, var(--origin-semantic-error) 80%, white)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--origin-semantic-error)'; }}
             >
-              Reject
+              Reject All
             </button>
           </div>
         )}

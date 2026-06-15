@@ -32,8 +32,24 @@ export function useGlobalKeybindings(handlers: Handlers) {
       if (ctrl && e.key === ',')               { e.preventDefault(); h.current.toggleSettings();  return; }
     }
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-   
+
+    let unlistenResized: (() => void) | undefined;
+    let unlistenScale:   (() => void) | undefined;
+
+    getCurrentWindow().onResized(() => {
+      window.dispatchEvent(new Event('resize'));
+    }).then(fn => { unlistenResized = fn; });
+
+    getCurrentWindow().onScaleChanged(({ payload: scaleFactor }) => {
+      document.documentElement.style.setProperty('--scale-factor', String(scaleFactor));
+      window.dispatchEvent(new Event('resize'));
+    }).then(fn => { unlistenScale = fn; });
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      unlistenResized?.();
+      unlistenScale?.();
+    };
   }, []);
 
   return { isFullscreen, toggleFullscreen };

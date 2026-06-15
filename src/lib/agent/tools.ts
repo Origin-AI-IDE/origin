@@ -217,3 +217,87 @@ export function createReadOnlyTools(opts: { folderPath: string }) {
   return { read_file: all.read_file, list_directory: all.list_directory, grep: all.grep, glob: all.glob };
 }
 
+// ── Ask mode tools (edit-only, no disk write — diff view handles write-back) ──
+
+// Resolve a (possibly short) AI-provided path to { fullPath, content }.
+// Open editor files take priority — matched by suffix so the AI can pass
+// just "layout.tsx" or "app/layout.tsx" and still hit the right open buffer.
+// Falls back to a disk read only when the file is not open.
+async function resolveFileContent(
+  aiPath: string,
+  folderPath: string,
+  getFileContents: () => Record<string, string>,
+): Promise<{ fullPath: string; content: string } | { error: string }> {
+  const norm = aiPath.replace(/\\/g, "/");
+  const openContents = getFileContents();
+  for (const [fullPath, content] of Object.entries(openContents)) {
+    const normFull = fullPath.replace(/\\/g, "/");
+    if (normFull === norm || normFull.endsWith("/" + norm)) {
+      return { fullPath, content };
+    }
+  }
+  // Not open — read from disk
+  try {
+    const resolved = resolvePath(aiPath, folderPath);
+    const content = await invoke<string>("read_file", { path: resolved, workspaceRoot: folderPath });
+    return { fullPath: resolved, content };
+  } catch (e) {
+    return { error: `Cannot read file "${aiPath}": ${String(e)}` };
+  }
+}
+
+export function createAskTools(opts: {
+  folderPath: string;
+  getFileContents: () => Record<string, string>;
+  onShowDiff: (path: string, original: string, patched: string) => void;
+}) {
+  const { folderPath, getFileContents, onShowDiff } = opts;
+
+  return {
+    edit: tool({
+      description:
+        "Replace an exact string in a file and open a per-hunk diff for the user to review. " +
+        "old_string must match the file verbatim (including whitespace) and be unique — " +
+        "include 3–5 lines of surrounding context to guarantee uniqueness.",
+      inputSchema: z.object({
+        path:       z.string().describe("Workspace-relative path to the file (e.g. src/foo.ts)"),
+        old_string: z.string().describe("Exact text to replace — verbatim, must be unique in the file"),
+        new_string: z.string().describe("Replacement text"),
+      }),
+      execute: async ({ path, old_string, new_string }) => {
+        const resolved = await resolveFileContent(path, folderPath, getFileContents);
+        if ("error" in resolved) return { error: resolved.error };
+        const patched = applyEdit(resolved.content, old_string, new_string);
+        if (patched === null) return { error: "old_string not found in file — add more context lines to make it unique." };
+        onShowDiff(resolved.fullPath, resolved.content, patched);
+        return { ok: true };
+      },
+    }),
+
+    multi_edit: tool({
+      description:
+        "Apply multiple search/replace edits to a single file atomically, then open a diff for review. " +
+        "Edits are applied in order; each old_string is matched against the content after previous edits.",
+      inputSchema: z.object({
+        path:  z.string().describe("Workspace-relative path to the file"),
+        edits: z.array(z.object({
+          old_string: z.string().describe("Exact text to replace (verbatim, must be unique)"),
+          new_string: z.string().describe("Replacement text"),
+        })).describe("Ordered list of replacements to apply"),
+      }),
+      execute: async ({ path, edits }) => {
+        const resolved = await resolveFileContent(path, folderPath, getFileContents);
+        if ("error" in resolved) return { error: resolved.error };
+        let content = resolved.content;
+        for (const e of edits) {
+          const result = applyEdit(content, e.old_string, e.new_string);
+          if (result === null) return { error: `old_string not found: "${e.old_string.slice(0, 60)}…"` };
+          content = result;
+        }
+        onShowDiff(resolved.fullPath, resolved.content, content);
+        return { ok: true };
+      },
+    }),
+  } as const;
+}
+
