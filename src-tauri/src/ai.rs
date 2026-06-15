@@ -28,14 +28,15 @@ pub async fn agent_bash_run(command: String, cwd: String) -> Result<BashResult, 
     }
 
     #[cfg(windows)]
-    let (shell, flag) = ("powershell.exe", "-Command");
+    let (shell, flag): (String, &str) = ("powershell.exe".into(), "-Command");
     #[cfg(not(windows))]
-    let shell_str = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into());
-    #[cfg(not(windows))]
-    let (shell, flag) = (shell_str.as_str(), "-c");
+    let (shell, flag): (String, &str) = (
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into()),
+        "-c",
+    );
 
     let out = tokio::task::spawn_blocking(move || {
-        let mut cmd = std::process::Command::new(shell);
+        let mut cmd = std::process::Command::new(&shell);
         cmd.args([flag, &command]).current_dir(&cwd);
         #[cfg(target_os = "windows")]
         {
