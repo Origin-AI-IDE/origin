@@ -1,9 +1,10 @@
 {
   "name": "origin",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "dev": "tauri dev",
     "vite": "vite",
     "build": "tauri build",

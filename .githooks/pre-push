@@ -1,0 +1,39 @@
+#!/bin/sh
+# Verify all three version files agree before any push.
+
+PKG=$(node -p "require('./package.json').version" 2>/dev/null)
+CARGO=$(grep -m1 '^version' src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+TAURI=$(node -p "require('./src-tauri/tauri.conf.json').version" 2>/dev/null)
+
+if [ "$PKG" != "$CARGO" ] || [ "$PKG" != "$TAURI" ]; then
+  echo ""
+  echo "  Version mismatch — push blocked."
+  echo "    package.json       : $PKG"
+  echo "    Cargo.toml         : $CARGO"
+  echo "    tauri.conf.json    : $TAURI"
+  echo ""
+  echo "  Update all three to the same version before pushing."
+  echo ""
+  exit 1
+fi
+
+# If pushing a tag, make sure it matches the version in the files.
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/tags/v*)
+      TAG_VER="${remote_ref#refs/tags/v}"
+      if [ "$TAG_VER" != "$PKG" ]; then
+        echo ""
+        echo "  Tag/version mismatch — push blocked."
+        echo "    Tag being pushed   : $remote_ref"
+        echo "    Version in files   : $PKG"
+        echo ""
+        echo "  Bump the version files to $TAG_VER or push the correct tag."
+        echo ""
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+exit 0
