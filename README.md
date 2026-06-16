@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.1-blue" alt="Version" />
-  <img src="https://img.shields.io/badge/platform-Windows-lightgrey" alt="Platform" />
+  <img src="https://img.shields.io/badge/version-0.1.2-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey" alt="Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%202-orange" alt="Tauri" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License" />
   <img src="https://github.com/Origin-AI-IDE/origin/actions/workflows/ci.yml/badge.svg" alt="CI" />
@@ -110,17 +110,25 @@ The AI is not a sidebar afterthought. It has full agentic capabilities: it can r
 
 Download the latest release from the [Releases](https://github.com/Origin-AI-IDE/origin/releases) page.
 
-| Artifact                     | Description                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------ |
+**Windows**
+
+| Artifact                      | Description                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------ |
 | `Origin_x.x.x_x64-setup.exe` | NSIS installer (~5.8 MB)                                                       |
 | `Origin_x.x.x_x64_en-US.msi` | MSI installer (~7.5 MB)                                                        |
-| `origin.exe`                 | Portable standalone binary (requires WebView2, pre-installed on Windows 10/11) |
+| `origin.exe`                  | Portable standalone binary (requires WebView2, pre-installed on Windows 10/11) |
+
+**Linux**
+
+| Artifact                    | Description          |
+| --------------------------- | -------------------- |
+| `Origin_x.x.x_amd64.deb`   | Debian/Ubuntu package |
 
 ---
 
 ## Building from Source
 
-**Prerequisites:** [Rust](https://rustup.rs/), [Node.js 20+](https://nodejs.org/), [Tauri CLI prerequisites for Windows](https://tauri.app/start/prerequisites/)
+**Prerequisites:** [Rust](https://rustup.rs/), [Node.js 20+](https://nodejs.org/), [Tauri CLI prerequisites](https://tauri.app/start/prerequisites/)
 
 ```bash
 git clone https://github.com/Origin-AI-IDE/origin.git
