@@ -82,6 +82,29 @@ export default function Terminal({ cwd, active, clearKey, pendingInput }: Props)
     xterm.open(containerRef.current);
     fitAddon.fit();
 
+    // Ctrl+Shift+C → copy selection; Ctrl+Shift+V → paste from clipboard.
+    // Both keys must be fully intercepted (return false) so they never reach the PTY.
+    xterm.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') {
+        if (e.type === 'keydown') {
+          const sel = xterm.getSelection();
+          if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+        }
+        return false;
+      }
+      if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+        if (e.type === 'keydown') {
+          navigator.clipboard.readText().then(text => {
+            if (text && termIdRef.current !== null) {
+              terminalWrite(termIdRef.current, text).catch(() => {});
+            }
+          }).catch(() => {});
+        }
+        return false;
+      }
+      return true;
+    });
+
     const dims = fitAddon.proposeDimensions();
     const cols = dims?.cols ?? 80;
     const rows = dims?.rows ?? 24;

@@ -387,6 +387,8 @@ export default function AiPanel({
   const messagesEndRef     = useRef<HTMLDivElement>(null);
 
   const folderPathRef              = useRef<string | null | undefined>(folderPath);
+  const originMdRef                = useRef<string>("");
+  const isFirstFolderEffect        = useRef(true);
   const activeSessionIdRef         = useRef<string | null>(null);
   const pendingAssistantDbIdRef    = useRef<string | null>(null);
   const pendingContentRef          = useRef<string>("");
@@ -413,6 +415,14 @@ export default function AiPanel({
   }, [folderPath]);
 
   useEffect(() => {
+    if (!folderPath) { originMdRef.current = ""; return; }
+    const sep = folderPath.includes("\\") ? "\\" : "/";
+    readFile(`${folderPath}${sep}ORIGIN.md`)
+      .then(content => { originMdRef.current = content.trim(); })
+      .catch(() => { originMdRef.current = ""; });
+  }, [folderPath]);
+
+  useEffect(() => {
     if (pendingScrollIndex === null || chatView !== "chat") return;
     const timer = setTimeout(() => {
       messageRefsMap.current.get(pendingScrollIndex)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -428,6 +438,24 @@ export default function AiPanel({
   useEffect(() => {
     const fp = folderPath ?? "";
     setSessions(lsForPath(fp));
+
+    if (!isFirstFolderEffect.current) {
+      // Project switched — cancel any in-flight stream and reset to new chat
+      streamCleanupRef.current?.();
+      streamCleanupRef.current = null;
+      if (flushTimerRef.current) { clearTimeout(flushTimerRef.current); flushTimerRef.current = null; }
+      const prevDbId = pendingAssistantDbIdRef.current;
+      if (prevDbId) {
+        pendingAssistantDbIdRef.current = null;
+        updateMessageContent(prevDbId, pendingContentRef.current, "interrupted").catch(() => {});
+      }
+      setMessages([]);
+      activeSessionIdRef.current = null;
+      setChatView("new");
+      localStorage.setItem("origin-ai-chat-view", "new");
+    }
+    isFirstFolderEffect.current = false;
+
     let cancelled = false;
     const storedId = localStorage.getItem(activeSessionKey(fp));
     if (storedId) {
@@ -594,9 +622,13 @@ export default function AiPanel({
     setChatView("chat");
     localStorage.setItem("origin-ai-chat-view", "chat");
 
-    const systemPrompt    = localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT;
-    const askSystemPrompt = localStorage.getItem("origin-ai-ask-prompt")    ?? DEFAULT_ASK_PROMPT;
-    const planSystemPrompt = localStorage.getItem("origin-ai-plan-prompt")  ?? DEFAULT_PLAN_PROMPT;
+    const originMd = originMdRef.current;
+    const withOriginMd = (base: string) =>
+      originMd ? `${base}\n\n---\n\n${originMd}` : base;
+
+    const systemPrompt     = withOriginMd(localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT);
+    const askSystemPrompt  = withOriginMd(localStorage.getItem("origin-ai-ask-prompt")    ?? DEFAULT_ASK_PROMPT);
+    const planSystemPrompt = withOriginMd(localStorage.getItem("origin-ai-plan-prompt")   ?? DEFAULT_PLAN_PROMPT);
 
     // ── Event handler ────────────────────────────────────────────────────────
     const handleEvent = (event: AgentEvent) => {
@@ -839,7 +871,7 @@ export default function AiPanel({
           { role: "assistant", content: "", streaming: true, parts: [] },
         ]);
 
-        const phase2SystemPrompt = localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT;
+        const phase2SystemPrompt = withOriginMd(localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT);
         const { cancel } = runAgent({ model, messages: phase2Messages, tools: makeFullTools(), systemPrompt: phase2SystemPrompt, cacheSystem: providerId === "anthropic", onEvent: handleEvent });
         streamCleanupRef.current = cancel;
       };

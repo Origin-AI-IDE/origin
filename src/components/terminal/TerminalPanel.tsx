@@ -49,7 +49,7 @@ function loadSavedTabs(defaultCwd: string): TermTab[] {
     if (raw) {
       const parsed = JSON.parse(raw) as SavedTermTab[];
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((t, i) => ({ id: i + 1, name: t.name, cwd: t.cwd }));
+        return parsed.map((t, i) => ({ id: i + 1, name: t.name, cwd: defaultCwd }));
       }
     }
   } catch { /* stored tab state is missing or malformed — start fresh */ }
@@ -125,6 +125,7 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
     return tabs[idx]?.id ?? tabs[0].id;
   });
   const nextId = useRef(initCounter(tabs));
+  const prevCwdRef = useRef(cwd);
   const [clearKeys, setClearKeys] = useState<Record<number, number>>({});
   const [pendingInputs, setPendingInputs] = useState<Record<number, string>>({});
 
@@ -157,7 +158,7 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
     Promise.all([getSetting("terminal.tabs"), getSetting("terminal.activeIndex")]).then(
       ([savedTabs, savedIdx]) => {
         if (savedTabs.length > 0) {
-          const restored = savedTabs.map((t, i) => ({ id: i + 1, name: t.name, cwd: t.cwd }));
+          const restored = savedTabs.map((t, i) => ({ id: i + 1, name: t.name, cwd }));
           setTabs(restored);
           nextId.current = initCounter(restored);
           setActiveId(restored[savedIdx]?.id ?? restored[0].id);
@@ -198,6 +199,16 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
     },
     [height, onResize],
   );
+
+  // ── Reset tabs when project folder changes ───────────────────────────────
+  useEffect(() => {
+    if (cwd === prevCwdRef.current) return;
+    prevCwdRef.current = cwd;
+    const fresh: TermTab[] = [{ id: 1, name: "1", cwd }];
+    nextId.current = 2;
+    setTabs(fresh);
+    setActiveId(1);
+  }, [cwd]);
 
   // ── Tab management ───────────────────────────────────────────────────────
   function addTab() {

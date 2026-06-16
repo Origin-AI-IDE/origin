@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { FolderOpen, FileText, FilePlus } from 'lucide-react';
+import { FolderOpen, FileText, FilePlus, ChevronDown } from 'lucide-react';
 import { useTheme } from '../../themes/ThemeContext';
 import { getSetting, pushRecentProject, type RecentProject } from '../../lib/settings';
 import wordmarkWhite from '../../assets/origin_wordmark_white_color.svg';
@@ -37,12 +37,20 @@ function ActionButton({ icon, label, onClick }: { icon: React.ReactNode; label: 
   );
 }
 
+const INITIAL_LIMIT = 5;
+const ITEM_HEIGHT = 34; // px per item including gap
+
 export default function EditorEmptyState({ onFolderOpen, onFileOpen, onNewFile }: Props) {
   const { theme } = useTheme();
   const [recents, setRecents] = useState<RecentProject[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  const [showMoreHovered, setShowMoreHovered] = useState(false);
 
   useEffect(() => {
-    getSetting('recent.projects').then(setRecents);
+    getSetting('recent.projects').then(projects => {
+      setRecents(projects);
+      setExpanded(false);
+    });
   }, []);
 
   async function handleOpenFolder() {
@@ -100,29 +108,63 @@ export default function EditorEmptyState({ onFolderOpen, onFileOpen, onNewFile }
               No recent projects
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              {recents.map(p => (
+            <>
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: '2px',
+                ...(expanded ? {
+                  maxHeight: `${INITIAL_LIMIT * ITEM_HEIGHT}px`,
+                  overflowY: 'auto',
+                } : {}),
+              }}>
+                {(expanded ? recents : recents.slice(0, INITIAL_LIMIT)).map(p => (
+                  <button
+                    key={p.path}
+                    onClick={() => handleRecentClick(p)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: '16px', padding: '6px 8px', borderRadius: '6px', border: 'none',
+                      background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+                      width: '100%', textAlign: 'left', transition: 'background 0.12s',
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--origin-bg-base)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  >
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--origin-fg-default)', flexShrink: 0 }}>
+                      {p.name}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--origin-fg-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'right' }}>
+                      {truncatePath(p.path)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {!expanded && recents.length > INITIAL_LIMIT && (
                 <button
-                  key={p.path}
-                  onClick={() => handleRecentClick(p)}
+                  onClick={() => setExpanded(true)}
+                  onMouseEnter={() => setShowMoreHovered(true)}
+                  onMouseLeave={() => setShowMoreHovered(false)}
                   style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: '16px', padding: '6px 8px', borderRadius: '6px', border: 'none',
-                    background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
-                    width: '100%', textAlign: 'left', transition: 'background 0.12s',
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    width: '100%', marginTop: '6px', padding: '4px 0',
+                    background: 'none', border: 'none', cursor: 'pointer',
                   }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--origin-bg-base)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
-                  <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--origin-fg-default)', flexShrink: 0 }}>
-                    {p.name}
-                  </span>
-                  <span style={{ fontSize: '12px', color: 'var(--origin-fg-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'right' }}>
-                    {truncatePath(p.path)}
-                  </span>
+                  <div style={{ flex: 1, height: '1px', background: 'var(--origin-border-default)' }} />
+                  <div style={{
+                    width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: `1px solid ${showMoreHovered ? 'var(--origin-fg-muted)' : 'var(--origin-border-default)'}`,
+                    color: showMoreHovered ? 'var(--origin-fg-default)' : 'var(--origin-fg-muted)',
+                    transition: 'border-color 0.15s, color 0.15s',
+                  }}>
+                    <ChevronDown size={11} strokeWidth={2.5} />
+                  </div>
+                  <div style={{ flex: 1, height: '1px', background: 'var(--origin-border-default)' }} />
                 </button>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
 
