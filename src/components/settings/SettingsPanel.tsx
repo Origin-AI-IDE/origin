@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, Eye, EyeOff, Bot, Palette, Check, MessageSquareDot } from "lucide-react";
+import { X, Eye, EyeOff, Bot, Palette, Check, MessageSquareDot, Code2, SlidersHorizontal } from "lucide-react";
 import { PROVIDERS } from "../ai/providers";
 import { loadApiKey, saveApiKey, deleteApiKey } from "../../lib/secrets";
 import { useTheme } from "../../themes/ThemeContext";
@@ -11,7 +11,7 @@ import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ASK_PROMPT, DEFAULT_PLAN_PROMPT } from "
 const LOCAL_IDS = new Set(["ollama", "lmstudio", "vllm"]);
 const API_PROVIDERS = PROVIDERS.filter(p => !LOCAL_IDS.has(p.id));
 
-type Section = "ai" | "prompts" | "appearance";
+type Section = "general" | "ai" | "prompts" | "appearance" | "editor";
 
 // ── Nav ──────────────────────────────────────────────────────────────────────
 
@@ -488,6 +488,178 @@ function PromptsSection() {
   );
 }
 
+// ── General Section ──────────────────────────────────────────────────────────
+
+const AUTOCOMPLETE_DELAY_KEY = 'origin-editor-autocomplete-delay';
+const AUTOCOMPLETE_DELAY_UNIT_KEY = 'origin-editor-autocomplete-delay-unit';
+const AUTOCOMPLETE_DELAY_DEFAULT_MS = 350;
+
+type DelayUnit = 'ms' | 's';
+
+function msToDisplay(ms: number, unit: DelayUnit): string {
+  return unit === 's' ? (ms / 1000).toString() : ms.toString();
+}
+
+function displayToMs(raw: string, unit: DelayUnit): number | null {
+  const n = parseFloat(raw);
+  if (isNaN(n) || n <= 0) return null;
+  return unit === 's' ? Math.round(n * 1000) : Math.round(n);
+}
+
+function GeneralSection() {
+  const [unit, setUnit] = useState<DelayUnit>(
+    () => (localStorage.getItem(AUTOCOMPLETE_DELAY_UNIT_KEY) as DelayUnit | null) ?? 'ms'
+  );
+  const [delayMs, setDelayMs] = useState(
+    () => parseInt(localStorage.getItem(AUTOCOMPLETE_DELAY_KEY) ?? String(AUTOCOMPLETE_DELAY_DEFAULT_MS), 10)
+  );
+  const [inputVal, setInputVal] = useState(() =>
+    msToDisplay(parseInt(localStorage.getItem(AUTOCOMPLETE_DELAY_KEY) ?? String(AUTOCOMPLETE_DELAY_DEFAULT_MS), 10), (localStorage.getItem(AUTOCOMPLETE_DELAY_UNIT_KEY) as DelayUnit | null) ?? 'ms')
+  );
+
+  function commitInput(raw: string) {
+    const ms = displayToMs(raw, unit);
+    if (ms !== null) {
+      setDelayMs(ms);
+      setInputVal(msToDisplay(ms, unit));
+      localStorage.setItem(AUTOCOMPLETE_DELAY_KEY, String(ms));
+    } else {
+      // Revert to last valid value on invalid input
+      setInputVal(msToDisplay(delayMs, unit));
+    }
+  }
+
+  function switchUnit(next: DelayUnit) {
+    setUnit(next);
+    setInputVal(msToDisplay(delayMs, next));
+    localStorage.setItem(AUTOCOMPLETE_DELAY_UNIT_KEY, next);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: "80px",
+    padding: "5px 8px",
+    borderRadius: "6px",
+    border: "1px solid var(--origin-border-default)",
+    backgroundColor: "var(--origin-bg-sidebar)",
+    color: "var(--origin-fg-default)",
+    fontSize: "12px",
+    fontFamily: "var(--font-mono)",
+    outline: "none",
+    textAlign: "right",
+  };
+
+  return (
+    <div style={{ padding: "2px 0 16px" }}>
+      <div style={{
+        fontSize: "12px", fontWeight: 600, color: "var(--origin-fg-muted)",
+        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "10px",
+      }}>
+        AI Autocomplete
+      </div>
+      <div style={{
+        display: "flex", alignItems: "center", gap: "12px",
+        padding: "10px 14px", borderRadius: "8px",
+        border: "1px solid var(--origin-border-default)",
+        backgroundColor: "var(--origin-bg-base)",
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "13px", color: "var(--origin-fg-default)" }}>Ghost text delay</div>
+          <div style={{ fontSize: "11px", color: "var(--origin-fg-muted)", marginTop: "2px" }}>
+            Wait time after typing stops before requesting a suggestion.
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+          <input
+            type="number"
+            min={unit === 's' ? 0.1 : 100}
+            step={unit === 's' ? 0.1 : 50}
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            onBlur={e => { e.currentTarget.style.borderColor = "var(--origin-border-default)"; commitInput(e.target.value); }}
+            onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+            style={inputStyle}
+            onFocus={e => { e.currentTarget.style.borderColor = "var(--origin-fg-muted)"; }}
+          />
+          {/* Unit toggle */}
+          <div style={{ display: "flex", borderRadius: "6px", border: "1px solid var(--origin-border-default)", overflow: "hidden" }}>
+            {(['ms', 's'] as DelayUnit[]).map(u => (
+              <button
+                key={u}
+                onClick={() => switchUnit(u)}
+                style={{
+                  padding: "5px 9px",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  border: "none",
+                  borderRight: u === 'ms' ? "1px solid var(--origin-border-default)" : "none",
+                  cursor: "pointer",
+                  backgroundColor: unit === u ? "var(--origin-fg-default)" : "transparent",
+                  color: unit === u ? "var(--origin-bg-base)" : "var(--origin-fg-muted)",
+                  transition: "all 0.1s",
+                }}
+              >
+                {u}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Editor Section ───────────────────────────────────────────────────────────
+
+function EditorSection() {
+  const [enabled, setEnabled] = useState(
+    () => localStorage.getItem('origin-editor-ai-autocomplete') !== 'false'
+  );
+
+  function toggle() {
+    const next = !enabled;
+    localStorage.setItem('origin-editor-ai-autocomplete', next ? 'true' : 'false');
+    setEnabled(next);
+  }
+
+  return (
+    <div style={{ padding: "2px 0 16px" }}>
+      <div style={{
+        fontSize: "12px", fontWeight: 600, color: "var(--origin-fg-muted)",
+        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "10px",
+      }}>
+        AI Autocomplete
+      </div>
+      <div style={{
+        display: "flex", alignItems: "center", gap: "12px",
+        padding: "10px 12px", borderRadius: "8px",
+        border: "1px solid var(--origin-border-default)",
+        backgroundColor: "var(--origin-bg-base)",
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "13px", color: "var(--origin-fg-default)" }}>
+            Inline completions
+          </div>
+          <div style={{ fontSize: "11px", color: "var(--origin-fg-muted)", marginTop: "2px" }}>
+            Ghost text as you type — Tab to accept, Escape to dismiss.
+          </div>
+        </div>
+        <button
+          onClick={toggle}
+          style={{
+            padding: "4px 12px", borderRadius: "6px", fontSize: "12px",
+            border: "1px solid var(--origin-border-default)",
+            backgroundColor: enabled ? "var(--origin-fg-default)" : "transparent",
+            color: enabled ? "var(--origin-bg-base)" : "var(--origin-fg-muted)",
+            cursor: "pointer", fontWeight: 500, transition: "all 0.15s",
+          }}
+        >
+          {enabled ? "On" : "Off"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Settings Panel ───────────────────────────────────────────────────────────
 
 interface SettingsPanelProps {
@@ -495,7 +667,7 @@ interface SettingsPanelProps {
 }
 
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
-  const [section, setSection] = useState<Section>("prompts");
+  const [section, setSection] = useState<Section>("general");
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -580,6 +752,12 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               Settings
             </div>
             <NavItem
+              active={section === "general"}
+              icon={<SlidersHorizontal size={14} />}
+              label="General"
+              onClick={() => setSection("general")}
+            />
+            <NavItem
               active={section === "ai"}
               icon={<Bot size={14} />}
               label="AI Providers"
@@ -597,6 +775,12 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               label="Appearance"
               onClick={() => setSection("appearance")}
             />
+            <NavItem
+              active={section === "editor"}
+              icon={<Code2 size={14} />}
+              label="Editor"
+              onClick={() => setSection("editor")}
+            />
           </div>
 
           {/* Content */}
@@ -606,11 +790,13 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               color: "var(--origin-fg-default)",
               marginBottom: "14px",
             }}>
-              {section === "ai" ? "AI Providers" : section === "prompts" ? "System Prompts" : "Appearance"}
+              {section === "general" ? "General" : section === "ai" ? "AI Providers" : section === "prompts" ? "System Prompts" : section === "appearance" ? "Appearance" : "Editor"}
             </div>
+            {section === "general"    && <GeneralSection />}
             {section === "ai"         && <AIProvidersSection />}
             {section === "prompts"    && <PromptsSection />}
             {section === "appearance" && <AppearanceSection />}
+            {section === "editor"     && <EditorSection />}
           </div>
         </div>
       </div>

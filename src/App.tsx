@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -16,6 +16,10 @@ import AiPanel from "./components/ai/AiPanel";
 import SettingsPanel from "./components/settings/SettingsPanel";
 import { setSetting, pushRecentProject } from "./lib/settings";
 import { useToast } from "./components/ui/Toast";
+import { streamText } from "ai";
+import { buildLanguageModel } from "./lib/agent/providers";
+import { loadApiKey } from "./lib/secrets";
+import type { AiCompletionFn } from "./lib/aiAutocomplete";
 import { getBranch } from "./lib/git";
 import { languageLabel } from "./components/editor/languageSupport";
 import { useWorkspace } from "./context/WorkspaceContext";
@@ -63,6 +67,39 @@ function App() {
   const [paletteOpen,    setPaletteOpen]   = useState(false);
   const [settingsOpen,   setSettingsOpen]  = useState(false);
   const [aboutOpen,      setAboutOpen]     = useState(false);
+
+  // Stable async-generator callback for AI inline autocomplete.
+  // Reads localStorage at call time so model/provider/enabled changes take effect immediately.
+  const getAiCompletion = useMemo<AiCompletionFn>(() => {
+    return async function* (prefix, suffix, signal) {
+      if (localStorage.getItem('origin-editor-ai-autocomplete') === 'false') return;
+      const providerId = localStorage.getItem('origin-ai-provider') ?? 'anthropic';
+      const modelId    = localStorage.getItem('origin-ai-model')    ?? 'claude-haiku-4-5-20251001';
+      const apiKey = await loadApiKey(providerId);
+      const LOCAL_IDS = ['ollama', 'lmstudio', 'vllm'];
+      if (!apiKey && !LOCAL_IDS.includes(providerId)) return;
+      const model = buildLanguageModel(providerId, modelId, apiKey ?? '');
+      const result = streamText({
+        model,
+        system: [
+          'You perform fill-in-the-middle code completion.',
+          'You receive PREFIX (code before cursor) and SUFFIX (code after cursor).',
+          'Your output is inserted EXACTLY at the cursor. PREFIX + your_output + SUFFIX must form valid, syntactically-correct code.',
+          'Output the next chunk you can predict with high confidence. Stop when the next decision becomes genuinely ambiguous.',
+          'Hard rules:',
+          '1. NEVER repeat any text already in PREFIX or SUFFIX.',
+          '2. NEVER write code that belongs after SUFFIX.',
+          '3. Match surrounding indentation, quoting, and naming conventions exactly.',
+          '4. Output empty string when no confident completion exists — never guess.',
+          '5. Output format: raw insertion text only. No markdown fences. No commentary.',
+        ].join('\n'),
+        prompt: `PREFIX:\n<<<\n${prefix}\n>>>\n\nSUFFIX:\n<<<\n${suffix}\n>>>\n\nOutput the text to insert at the cursor.`,
+        abortSignal: signal,
+      });
+      for await (const chunk of result.textStream) yield chunk;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps — reads localStorage lazily at call time
 
   // Persist folderPath to Tauri store (WorkspaceContext handles localStorage)
   useEffect(() => { setSetting('workspace.folder', folderPath ?? ''); }, [folderPath]);
@@ -294,6 +331,7 @@ function App() {
                       rootPath={folderPath}
                       onDefinitionJump={(fp, line, col) => openTabAtLine(fp, line, col)}
                       onMissingServer={handleMissingServer}
+                      getAiCompletion={getAiCompletion}
                     />
                   ) : activeTab && fileErrors[activeTab] ? (
                     <div className="flex-1 flex flex-col items-center justify-center gap-2">

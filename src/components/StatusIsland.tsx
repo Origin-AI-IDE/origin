@@ -404,6 +404,7 @@ function CardBody({ id, task, onClearTask, onSetTask, gitData, gitBranch, projec
                     </div>
                     <div className="font-mono text-[9px]" style={{ color: "var(--origin-fg-subtle)" }}>
                       {fmtTokens(m.inputTokens)} in · {fmtTokens(m.outputTokens)} out
+                      {(m.cacheReadTokens ?? 0) > 0 && <> · {fmtTokens(m.cacheReadTokens!)} cached</>}
                     </div>
                   </div>
                   <span className="font-mono text-[10px]" style={{ color: "var(--origin-fg-default)", flexShrink: 0, alignSelf: "flex-start" }}>

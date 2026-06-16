@@ -737,7 +737,7 @@ export default function AiPanel({
             const modelName = prov?.models.find(m => m.id === modelId)?.name ?? modelId;
             const color = (prov as { color?: string })?.color ?? "#6366f1";
             const cost = computeCost(modelId, usage.inputTokens, usage.outputTokens);
-            recordUsage(modelId, modelName, providerId, usage.inputTokens, usage.outputTokens, cost, color);
+            recordUsage(modelId, modelName, providerId, usage.inputTokens, usage.outputTokens, cost, color, usage.cacheReadTokens);
           }
 
           if (currentModeRef.current === "plan") {
@@ -840,12 +840,12 @@ export default function AiPanel({
         ]);
 
         const phase2SystemPrompt = localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT;
-        const { cancel } = runAgent({ model, messages: phase2Messages, tools: makeFullTools(), systemPrompt: phase2SystemPrompt, onEvent: handleEvent });
+        const { cancel } = runAgent({ model, messages: phase2Messages, tools: makeFullTools(), systemPrompt: phase2SystemPrompt, cacheSystem: providerId === "anthropic", onEvent: handleEvent });
         streamCleanupRef.current = cancel;
       };
 
       const readOnlyTools = createReadOnlyTools({ folderPath: fp || "." });
-      const { cancel } = runAgent({ model, messages: modelMessages, tools: readOnlyTools, systemPrompt: planSystemPrompt, onEvent: handleEvent });
+      const { cancel } = runAgent({ model, messages: modelMessages, tools: readOnlyTools, systemPrompt: planSystemPrompt, cacheSystem: providerId === "anthropic", onEvent: handleEvent });
       streamCleanupRef.current = cancel;
     } else if (mode === "ask") {
       const askTools = createAskTools({
@@ -855,10 +855,10 @@ export default function AiPanel({
           onApplyCodeRef.current?.(patched, path, undefined);
         },
       });
-      const { cancel } = runAgent({ model, messages: modelMessages, tools: askTools, systemPrompt: askSystemPrompt, onEvent: handleEvent });
+      const { cancel } = runAgent({ model, messages: modelMessages, tools: askTools, systemPrompt: askSystemPrompt, cacheSystem: providerId === "anthropic", onEvent: handleEvent });
       streamCleanupRef.current = cancel;
     } else {
-      const { cancel } = runAgent({ model, messages: modelMessages, tools: makeFullTools(), systemPrompt, onEvent: handleEvent });
+      const { cancel } = runAgent({ model, messages: modelMessages, tools: makeFullTools(), systemPrompt, cacheSystem: providerId === "anthropic", onEvent: handleEvent });
       streamCleanupRef.current = cancel;
     }
   }, [showToast]);

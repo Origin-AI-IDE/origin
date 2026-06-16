@@ -1,13 +1,14 @@
 const USAGE_KEY = "origin_ai_usage";
 
 export interface ModelUsage {
-  modelId:      string;
-  modelName:    string;
-  providerId:   string;
-  inputTokens:  number;
-  outputTokens: number;
-  cost:         number;
-  color:        string;
+  modelId:          string;
+  modelName:        string;
+  providerId:       string;
+  inputTokens:      number;
+  outputTokens:     number;
+  cacheReadTokens?: number;
+  cost:             number;
+  color:            string;
 }
 
 export type UsageStore = Record<string, ModelUsage>;
@@ -22,13 +23,14 @@ export function readUsage(): UsageStore {
 }
 
 export function recordUsage(
-  modelId:      string,
-  modelName:    string,
-  providerId:   string,
-  inputTokens:  number,
-  outputTokens: number,
-  cost:         number,
-  color:        string,
+  modelId:          string,
+  modelName:        string,
+  providerId:       string,
+  inputTokens:      number,
+  outputTokens:     number,
+  cost:             number,
+  color:            string,
+  cacheReadTokens?: number,
 ): void {
   const store = readUsage();
   const existing = store[modelId];
@@ -36,9 +38,10 @@ export function recordUsage(
     modelId,
     modelName,
     providerId,
-    inputTokens:  (existing?.inputTokens  ?? 0) + inputTokens,
-    outputTokens: (existing?.outputTokens ?? 0) + outputTokens,
-    cost:         (existing?.cost         ?? 0) + cost,
+    inputTokens:      (existing?.inputTokens      ?? 0) + inputTokens,
+    outputTokens:     (existing?.outputTokens     ?? 0) + outputTokens,
+    cacheReadTokens:  (existing?.cacheReadTokens  ?? 0) + (cacheReadTokens ?? 0),
+    cost:             (existing?.cost             ?? 0) + cost,
     color,
   };
   try {

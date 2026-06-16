@@ -21,19 +21,46 @@ export interface RunAgentOptions {
   messages:     ModelMessage[];
   tools:        ToolSet;
   systemPrompt: string;
+  cacheSystem?: boolean;
   onEvent:      (event: AgentEvent) => void;
 }
 
 export function runAgent(options: RunAgentOptions): { cancel: () => void } {
-  const { model, messages, tools, systemPrompt, onEvent } = options;
+  const { model, messages, tools, systemPrompt, cacheSystem = false, onEvent } = options;
   const controller = new AbortController();
 
   (async () => {
     try {
+      // System prompt as a leading message so we can attach cache_control via providerOptions.
+      // When cacheSystem is true (Anthropic only), two cache breakpoints are set:
+      //   1. The system message — caches tools + system prompt prefix.
+      //   2. The last history message — caches the growing conversation prefix each turn.
+      // Max 4 breakpoints allowed by Anthropic; we use ≤ 2.
+      const sysMsg = (
+        cacheSystem
+          ? { role: "system", content: systemPrompt, providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } } }
+          : { role: "system", content: systemPrompt }
+      ) as ModelMessage;
+
+      let historyMsgs = messages.slice();
+      if (cacheSystem && historyMsgs.length > 0) {
+        const last = historyMsgs[historyMsgs.length - 1];
+        const lastWithOptions = last as ModelMessage & { providerOptions?: { anthropic?: Record<string, unknown> } };
+        historyMsgs[historyMsgs.length - 1] = {
+          ...last,
+          providerOptions: {
+            ...(lastWithOptions.providerOptions ?? {}),
+            anthropic: {
+              ...(lastWithOptions.providerOptions?.anthropic ?? {}),
+              cacheControl: { type: "ephemeral" },
+            },
+          },
+        } as ModelMessage;
+      }
+
       const result = streamText({
         model,
-        system:      systemPrompt,
-        messages,
+        messages:    [sysMsg, ...historyMsgs],
         tools,
         stopWhen:    stepCountIs(24),
         abortSignal: controller.signal,
@@ -69,15 +96,19 @@ export function runAgent(options: RunAgentOptions): { cancel: () => void } {
             onEvent({ type: "step-finish" });
             break;
 
-          case "finish":
+          case "finish": {
+            const { inputTokenDetails } = part.totalUsage;
             onEvent({
               type:  "finish",
               usage: {
-                inputTokens:  part.totalUsage.inputTokens  ?? 0,
-                outputTokens: part.totalUsage.outputTokens ?? 0,
+                inputTokens:         part.totalUsage.inputTokens          ?? 0,
+                outputTokens:        part.totalUsage.outputTokens         ?? 0,
+                cacheReadTokens:     inputTokenDetails.cacheReadTokens    ?? 0,
+                cacheCreationTokens: inputTokenDetails.cacheWriteTokens   ?? 0,
               },
             });
             break;
+          }
 
           case "error":
             onEvent({ type: "error", message: String(part.error) });

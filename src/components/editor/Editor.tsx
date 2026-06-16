@@ -18,6 +18,7 @@ import { getLanguageExtension, languageLabel } from './languageSupport';
 import { createLspExtension } from '../../lib/lspCm6';
 import { getLspLanguage } from '../../lib/lsp';
 import { useToast } from '../ui/Toast';
+import { createAiAutocompleteExtension, type AiCompletionFn } from '../../lib/aiAutocomplete';
 
 // ── Syntax token colors — all via CSS variables ────────────────────────────────
 
@@ -226,12 +227,14 @@ interface Props {
   rootPath?: string | null;
   onDefinitionJump?: (filePath: string, line: number, col: number) => void;
   onMissingServer?: (language: string, installCmd: string) => void;
+  // AI inline autocomplete
+  getAiCompletion?: AiCompletionFn;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { path, content, onChange, onCursorChange, initialCursor, jumpTo, onAddToAiContext, onAcceptDiff, onReady, rootPath, onDefinitionJump, onMissingServer }, ref
+  { path, content, onChange, onCursorChange, initialCursor, jumpTo, onAddToAiContext, onAcceptDiff, onReady, rootPath, onDefinitionJump, onMissingServer, getAiCompletion }, ref
 ) {
   const containerRef   = useRef<HTMLDivElement>(null);
   const viewRef        = useRef<EditorView | null>(null);
@@ -244,6 +247,11 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
   const mergeCompartment = useRef(new Compartment());
   // LSP extensions compartment — reconfigured per file path
   const lspCompartment = useRef(new Compartment());
+  // AI autocomplete compartment — first in extensions so its keymap beats indentWithTab
+  const autocompleteCompartment = useRef(new Compartment());
+  // Stable ref — trigger plugin reads .current so it always calls the latest function
+  const getAiCompletionRef = useRef(getAiCompletion);
+  getAiCompletionRef.current = getAiCompletion;
   // Stable ref so the LSP definition callback always sees the current value
   const onDefinitionJumpRef = useRef(onDefinitionJump);
   onDefinitionJumpRef.current = onDefinitionJump;
@@ -400,6 +408,10 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     const state = EditorState.create({
       doc: content,
       extensions: [
+        // Must be first so ghostKeymap wins the Tab key race over indentWithTab.
+        autocompleteCompartment.current.of(
+          getAiCompletion ? createAiAutocompleteExtension(getAiCompletionRef) : []
+        ),
         lineNumbers(),
         highlightActiveLineGutter(),
         highlightActiveLine(),
@@ -489,6 +501,18 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       if (v) v.dispatch({ effects: lspCompartment.current.reconfigure([]) });
     };
   }, [path, rootPath]);
+
+  // Reconfigure autocomplete compartment when the prop goes from undefined ↔ function.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: autocompleteCompartment.current.reconfigure(
+        getAiCompletion ? createAiAutocompleteExtension(getAiCompletionRef) : []
+      ),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!getAiCompletion]);
 
   function handleContextMenu(e: React.MouseEvent) {
     if (!onAddToAiContext) return;

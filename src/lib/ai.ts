@@ -41,6 +41,8 @@ Rules:
 - Stop after the closing </origin-plan> tag — do not execute any changes`;
 
 export interface UsageData {
-  inputTokens:  number;
-  outputTokens: number;
+  inputTokens:          number;
+  outputTokens:         number;
+  cacheReadTokens?:     number;
+  cacheCreationTokens?: number;
 }
