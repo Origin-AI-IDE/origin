@@ -42,7 +42,7 @@ export function runAgent(options: RunAgentOptions): { cancel: () => void } {
           : { role: "system", content: systemPrompt }
       ) as ModelMessage;
 
-      let historyMsgs = messages.slice();
+      const historyMsgs = messages.slice();
       if (cacheSystem && historyMsgs.length > 0) {
         const last = historyMsgs[historyMsgs.length - 1];
         const lastWithOptions = last as ModelMessage & { providerOptions?: { anthropic?: Record<string, unknown> } };
