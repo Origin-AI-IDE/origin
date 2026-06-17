@@ -10,7 +10,12 @@ import ChatBox from "./ChatBox";
 import MessageBubble from "./MessageBubble";
 import MarkdownMessage from "./MarkdownMessage";
 import { PROVIDERS } from "./providers";
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ASK_PROMPT, DEFAULT_PLAN_PROMPT, type UsageData } from "../../lib/ai";
+import {
+  DEFAULT_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT_LITE,
+  DEFAULT_ASK_PROMPT,    DEFAULT_ASK_PROMPT_LITE,
+  DEFAULT_PLAN_PROMPT,   DEFAULT_PLAN_PROMPT_LITE,
+  type UsageData,
+} from "../../lib/ai";
 import { ensurePricing, computeCost } from "../../lib/pricing";
 import { recordUsage } from "../../lib/usage";
 import { loadApiKey } from "../../lib/secrets";
@@ -626,9 +631,10 @@ export default function AiPanel({
     const withOriginMd = (base: string) =>
       originMd ? `${base}\n\n---\n\n${originMd}` : base;
 
-    const systemPrompt     = withOriginMd(localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT);
-    const askSystemPrompt  = withOriginMd(localStorage.getItem("origin-ai-ask-prompt")    ?? DEFAULT_ASK_PROMPT);
-    const planSystemPrompt = withOriginMd(localStorage.getItem("origin-ai-plan-prompt")   ?? DEFAULT_PLAN_PROMPT);
+    const isMax = (localStorage.getItem("origin-ai-effort") ?? "normal") === "max";
+    const systemPrompt     = withOriginMd(localStorage.getItem("origin-ai-system-prompt") ?? (isMax ? DEFAULT_SYSTEM_PROMPT     : DEFAULT_SYSTEM_PROMPT_LITE));
+    const askSystemPrompt  = withOriginMd(localStorage.getItem("origin-ai-ask-prompt")    ?? (isMax ? DEFAULT_ASK_PROMPT        : DEFAULT_ASK_PROMPT_LITE));
+    const planSystemPrompt = withOriginMd(localStorage.getItem("origin-ai-plan-prompt")   ?? (isMax ? DEFAULT_PLAN_PROMPT       : DEFAULT_PLAN_PROMPT_LITE));
 
     // ── Event handler ────────────────────────────────────────────────────────
     const handleEvent = (event: AgentEvent) => {
@@ -871,7 +877,8 @@ export default function AiPanel({
           { role: "assistant", content: "", streaming: true, parts: [] },
         ]);
 
-        const phase2SystemPrompt = withOriginMd(localStorage.getItem("origin-ai-system-prompt") ?? DEFAULT_SYSTEM_PROMPT);
+        const phase2IsMax = (localStorage.getItem("origin-ai-effort") ?? "normal") === "max";
+        const phase2SystemPrompt = withOriginMd(localStorage.getItem("origin-ai-system-prompt") ?? (phase2IsMax ? DEFAULT_SYSTEM_PROMPT : DEFAULT_SYSTEM_PROMPT_LITE));
         const { cancel } = runAgent({ model, messages: phase2Messages, tools: makeFullTools(), systemPrompt: phase2SystemPrompt, cacheSystem: providerId === "anthropic", onEvent: handleEvent });
         streamCleanupRef.current = cancel;
       };

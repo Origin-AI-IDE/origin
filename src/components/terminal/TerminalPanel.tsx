@@ -26,6 +26,7 @@ interface Props {
   height: number;
   onResize: (h: number) => void;
   onClose: () => void;
+  hidden?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ function PanelBtn({
 
 // ── Panel ─────────────────────────────────────────────────────────────────────
 
-const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPanel({ cwd, height, onResize, onClose }, ref) {
+const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPanel({ cwd, height, onResize, onClose, hidden }, ref) {
   const [tabs, setTabs] = useState<TermTab[]>(() => loadSavedTabs(cwd));
   const [activeId, setActiveId] = useState<number>(() => {
     const idx = loadSavedActiveIndex(tabs.length);
@@ -204,10 +205,10 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
   useEffect(() => {
     if (cwd === prevCwdRef.current) return;
     prevCwdRef.current = cwd;
-    const fresh: TermTab[] = [{ id: 1, name: "1", cwd }];
-    nextId.current = 2;
+    const newId = nextId.current++;
+    const fresh: TermTab[] = [{ id: newId, name: "1", cwd }];
     setTabs(fresh);
-    setActiveId(1);
+    setActiveId(newId);
   }, [cwd]);
 
   // ── Tab management ───────────────────────────────────────────────────────
@@ -260,7 +261,7 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
       style={{
         height,
         flexShrink: 0,
-        display: "flex",
+        display: hidden ? "none" : "flex",
         flexDirection: "column",
         borderTop: "1px solid var(--origin-border-default)",
         backgroundColor: "var(--origin-bg-panel)",

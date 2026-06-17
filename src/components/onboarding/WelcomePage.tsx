@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowRight } from 'lucide-react';
-import onboardingImg from '../../assets/onboarding-image.png';
+import onboarding1 from '../../assets/onboarding-1.png';
+import onboarding2 from '../../assets/onboarding-2.png';
+import onboarding3 from '../../assets/onboarding-3.png';
 import wordmarkWhite from '../../assets/origin_wordmark_white_color.svg';
 import wordmarkBlack from '../../assets/origin_wordmark_black_color.svg';
 import { useTheme } from '../../themes/ThemeContext';
 
 interface Props { onStart: () => void; onSkip: () => void; }
 
-const SLIDES = [onboardingImg, onboardingImg, onboardingImg];
+const SLIDES = [onboarding1, onboarding2, onboarding3];
 
 export default function WelcomePage({ onStart, onSkip }: Props) {
   const [slideIdx, setSlideIdx] = useState(0);
@@ -38,8 +40,8 @@ export default function WelcomePage({ onStart, onSkip }: Props) {
       </div>
 
       {/* Slideshow */}
-      <div className="flex flex-col items-center" style={{ width: '100%', maxWidth: '780px', gap: '10px' }}>
-        <div style={{ position: 'relative', width: '100%', height: '380px' }}>
+      <div className="flex flex-col items-center" style={{ width: '100%', maxWidth: '860px', gap: '10px' }}>
+        <div style={{ position: 'relative', width: '100%', height: '420px' }}>
           {SLIDES.map((src, i) => (
             <div key={i} style={{
               position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',

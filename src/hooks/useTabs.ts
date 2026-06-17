@@ -23,7 +23,7 @@ export function useTabs() {
 
   useEffect(() => {
     if (!activeTab || fileContents[activeTab] !== undefined) return;
-    if (activeTab.startsWith('__untitled__') || activeTab.startsWith('__diff__')) return;
+    if (activeTab.startsWith('__untitled__') || activeTab.startsWith('__diff__') || activeTab.startsWith('__preview__')) return;
     readFile(activeTab)
       .then(content => setFileContents(prev => ({ ...prev, [activeTab]: content })))
       .catch((e) => {
@@ -100,6 +100,15 @@ export function useTabs() {
     setActiveTab(tabPath);
   }
 
+  function openPreviewTab() {
+    const tabPath = '__preview__';
+    setTabs(prev => prev.find(t => t.path === tabPath)
+      ? prev
+      : [...prev, { path: tabPath, name: 'Live Preview', isDirty: false, kind: 'preview' as const }]
+    );
+    setActiveTab(tabPath);
+  }
+
   async function handleSave(path: string) {
     const content = fileContentsRef.current[path];
     if (content === undefined) return;
@@ -148,7 +157,7 @@ export function useTabs() {
     activeTabRef,
     fileContentsRef,
     openTab, openTabAtLine, closeTab,
-    handleNewFile, handleEditorChange, openAiDiffTab,
+    handleNewFile, handleEditorChange, openAiDiffTab, openPreviewTab,
     handleSave, handleSaveAs, handleSaveAll,
   };
 }

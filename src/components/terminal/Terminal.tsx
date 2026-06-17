@@ -135,6 +135,8 @@ export default function Terminal({ cwd, active, clearKey, pendingInput }: Props)
     });
 
     const observer = new ResizeObserver(() => {
+      // Skip when hidden (display:none collapses dimensions to 0 — fitting at 0 truncates the scrollback buffer)
+      if (!containerRef.current || containerRef.current.offsetWidth === 0 || containerRef.current.offsetHeight === 0) return;
       fitAddon.fit();
       const d = fitAddon.proposeDimensions();
       if (termIdRef.current !== null && d) {

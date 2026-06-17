@@ -9,6 +9,7 @@ import EditorEmptyState from "./components/editor/EditorEmptyState";
 import TabBar from "./components/editor/TabBar";
 import Editor, { type EditorHandle, type EditorContext } from "./components/editor/Editor";
 import AiDiffPane, { type AiDiffTabData } from "./components/editor/AiDiffPane";
+import WebPreviewPane from "./components/editor/WebPreviewPane";
 import StatusBar from "./components/StatusBar";
 import TerminalPanel, { type TerminalPanelHandle } from "./components/terminal/TerminalPanel";
 import CommandPalette from "./components/palette/CommandPalette";
@@ -44,7 +45,7 @@ function App() {
     activeTabRef,
     fileContentsRef,
     openTab, openTabAtLine, closeTab,
-    handleNewFile, handleEditorChange, openAiDiffTab,
+    handleNewFile, handleEditorChange, openAiDiffTab, openPreviewTab,
     handleSave, handleSaveAs, handleSaveAll,
   } = useTabs();
 
@@ -54,6 +55,27 @@ function App() {
     terminalOpen, setTerminalOpen,
     terminalHeight, setTerminalHeight,
   } = useWorkspacePersistence();
+
+  // Once the terminal has been opened, keep it mounted so PTY sessions survive toggle.
+  const [terminalMounted, setTerminalMounted] = useState(terminalOpen);
+  useEffect(() => { if (terminalOpen) setTerminalMounted(true); }, [terminalOpen]);
+
+  // Auto-hide sidebars when entering live preview; restore on exit.
+  // Auto-hide all panels when entering live preview; restore on exit.
+  const prePreviewPanels = useRef<{ sidebarOpen: boolean; aiPanelOpen: boolean; terminalOpen: boolean } | null>(null);
+  useEffect(() => {
+    if (activeTab === '__preview__') {
+      prePreviewPanels.current = { sidebarOpen, aiPanelOpen, terminalOpen };
+      setSidebarOpen(false);
+      setAiPanelOpen(false);
+      setTerminalOpen(false);
+    } else if (prePreviewPanels.current !== null) {
+      setSidebarOpen(prePreviewPanels.current.sidebarOpen);
+      setAiPanelOpen(prePreviewPanels.current.aiPanelOpen);
+      setTerminalOpen(prePreviewPanels.current.terminalOpen);
+      prePreviewPanels.current = null;
+    }
+  }, [activeTab]);
 
   const { showToast } = useToast();
   const editorRef      = useRef<EditorHandle>(null);
@@ -300,7 +322,13 @@ function App() {
                   tabs={tabs}
                   activeTab={activeTab}
                   onSelect={setActiveTab}
-                  onClose={closeTab}
+                  onClose={(path) => {
+                    if (path === '__preview__') localStorage.removeItem('origin-preview-url');
+                    closeTab(path);
+                  }}
+                  onNewFile={handleNewFile}
+                  onOpenFile={handleOpenFile}
+                  onOpenPreview={openPreviewTab}
                 />
                 <main className="flex-1 flex overflow-hidden" style={{ backgroundColor: "var(--origin-bg-editor)", position: "relative" }}>
                   {tabs.length === 0 ? (
@@ -315,6 +343,8 @@ function App() {
                       if (!diffTab) return null;
                       return <AiDiffPane tab={diffTab} onClose={() => closeTab(activeTab)} />;
                     })()
+                  ) : activeTab === '__preview__' ? (
+                    <WebPreviewPane />
                   ) : activeTab && fileContents[activeTab] !== undefined ? (
                     <Editor
                       ref={editorRef}
@@ -360,13 +390,14 @@ function App() {
                     />
                   )}
                 </main>
-                {terminalOpen && (
+                {terminalMounted && (
                   <TerminalPanel
                     ref={terminalRef}
                     cwd={folderPath ?? "."}
                     height={terminalHeight}
                     onResize={setTerminalHeight}
                     onClose={() => setTerminalOpen(false)}
+                    hidden={!terminalOpen}
                   />
                 )}
               </div>

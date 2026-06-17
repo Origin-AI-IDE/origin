@@ -218,6 +218,9 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
   const [selectedProviderId, setSelectedProviderId] = useState(
     () => localStorage.getItem("origin-ai-provider") ?? DEFAULT_PROVIDER_ID
   );
+  const [effort, setEffort] = useState<"normal" | "max">(
+    () => (localStorage.getItem("origin-ai-effort") ?? "normal") as "normal" | "max"
+  );
 
   const refreshContext = useCallback(() => {
     if (!getEditorContext || contextDismissed) return;
@@ -539,12 +542,14 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
           <PreferencesDropdown
             anchorEl={prefsAnchorRef.current}
             selectedModelId={selectedModelId}
+            effort={effort}
             onSelect={(providerId, modelId) => {
               setSelectedModelId(modelId);
               setSelectedProviderId(providerId);
               localStorage.setItem("origin-ai-model", modelId);
               localStorage.setItem("origin-ai-provider", providerId);
             }}
+            onEffortChange={e => { setEffort(e); localStorage.setItem("origin-ai-effort", e); }}
             onClose={() => setPrefsOpen(false)}
           />
         )}

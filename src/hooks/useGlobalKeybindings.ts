@@ -14,12 +14,33 @@ export function useGlobalKeybindings(handlers: Handlers) {
   const h = useRef(handlers);
   h.current = handlers;
 
-  function toggleFullscreen() {
-    setIsFullscreen(v => {
-      const next = !v;
-      getCurrentWindow().setFullscreen(next);
-      return next;
-    });
+  // Refs so the single useEffect closure always reads current values
+  const isFullscreenRef = useRef(false);
+  const wasMaximizedRef = useRef(false);
+
+  async function toggleFullscreen() {
+    const win = getCurrentWindow();
+    if (!isFullscreenRef.current) {
+      // Unmaximize before entering fullscreen — frameless + WebView2 bug: going
+      // fullscreen from a maximized state leaves a black bar (tauri-apps/tauri#11788)
+      const maximized = await win.isMaximized();
+      wasMaximizedRef.current = maximized;
+      if (maximized) {
+        await win.unmaximize();
+        // Win32 processes window state via the message queue — the promise resolves
+        // before the OS has finished the restore, so setFullscreen fires into a
+        // mid-transition window and silently fails without this delay.
+        await new Promise(r => setTimeout(r, 150));
+      }
+      await win.setFullscreen(true);
+      isFullscreenRef.current = true;
+      setIsFullscreen(true);
+    } else {
+      await win.setFullscreen(false);
+      if (wasMaximizedRef.current) await win.maximize();
+      isFullscreenRef.current = false;
+      setIsFullscreen(false);
+    }
   }
 
   useEffect(() => {
