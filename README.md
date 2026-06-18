@@ -1,5 +1,3 @@
- > ⚠️ **Early Development** — Origin is still in early development. Expect bugs, breaking changes, and missing features. Use at your own risk.
-
 <p align="center">
   <img src="media/wordmark.svg" width="300" alt="Origin IDE" />
 </p>
