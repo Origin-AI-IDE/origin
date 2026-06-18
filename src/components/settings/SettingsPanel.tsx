@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, Eye, EyeOff, Bot, Palette, Check, MessageSquareDot, Code2, SlidersHorizontal } from "lucide-react";
+import { X, Eye, EyeOff, Bot, Palette, Check, MessageSquareDot, Code2, SlidersHorizontal, Terminal, Copy } from "lucide-react";
 import { PROVIDERS } from "../ai/providers";
 import { loadApiKey, saveApiKey, deleteApiKey } from "../../lib/secrets";
 import { useTheme } from "../../themes/ThemeContext";
@@ -11,7 +11,7 @@ import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ASK_PROMPT, DEFAULT_PLAN_PROMPT } from "
 const LOCAL_IDS = new Set(["ollama", "lmstudio", "vllm"]);
 const API_PROVIDERS = PROVIDERS.filter(p => !LOCAL_IDS.has(p.id));
 
-type Section = "general" | "ai" | "prompts" | "appearance" | "editor";
+type Section = "general" | "ai" | "prompts" | "appearance" | "editor" | "terminal";
 
 // ── Nav ──────────────────────────────────────────────────────────────────────
 
@@ -660,6 +660,118 @@ function EditorSection() {
   );
 }
 
+// ── Terminal Section ─────────────────────────────────────────────────────────
+
+const SHELL_CONFIGS: Record<string, { label: string; filename: string; code: string }> = {
+  powershell: {
+    label: "PowerShell",
+    filename: "$PROFILE",
+    code: [
+      'function prompt {',
+      '    $code = if ($?) { 0 } else { $LASTEXITCODE }',
+      "    $p = ($PWD.Path -replace '\\\\', '/') -replace '^([A-Za-z]):', '/$1'",
+      '    [Console]::Write("`e]133;D;$code`a`e]7;file://$env:COMPUTERNAME$p`a`e]133;A`a")',
+      '    "PS $($PWD.Path)> `e]133;B`a"',
+      '}',
+    ].join('\n'),
+  },
+  bash: {
+    label: "Bash",
+    filename: "~/.bashrc",
+    code: [
+      '__origin_prompt() {',
+      '  local code=$?',
+      "  printf '\\033]133;D;%s\\007' \"$code\"",
+      "  printf '\\033]7;file://%s%s\\007' \"$HOSTNAME\" \"$PWD\"",
+      "  printf '\\033]133;A\\007'",
+      '}',
+      'PROMPT_COMMAND="__origin_prompt${PROMPT_COMMAND:+;$PROMPT_COMMAND}"',
+      "PS1=\"${PS1}\"$'\\033]133;B\\007'",
+    ].join('\n'),
+  },
+  zsh: {
+    label: "Zsh",
+    filename: "~/.zshrc",
+    code: [
+      '__origin_precmd() {',
+      '  local code=$?',
+      "  printf '\\033]133;D;%s\\007' \"$code\"",
+      "  printf '\\033]7;file://%s%s\\007' \"$HOST\" \"$PWD\"",
+      "  printf '\\033]133;A\\007'",
+      '}',
+      'precmd_functions+=(__origin_precmd)',
+      "PROMPT=\"${PROMPT}\"$'\\033]133;B\\007'",
+    ].join('\n'),
+  },
+};
+
+function TerminalSection() {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  function copy(key: string, code: string) {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 1800);
+    }).catch(() => {});
+  }
+
+  return (
+    <div style={{ padding: "2px 0 16px" }}>
+      <div style={{
+        fontSize: "12px", fontWeight: 600, color: "var(--origin-fg-muted)",
+        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "10px",
+      }}>
+        Shell Integration
+      </div>
+      <p style={{ fontSize: "12px", color: "var(--origin-fg-muted)", marginBottom: "20px", lineHeight: 1.6 }}>
+        Paste the snippet for your shell into the file shown, then reload your shell. Once active, terminal tabs show a live directory and a colored dot for command exit status.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {Object.entries(SHELL_CONFIGS).map(([key, cfg]) => (
+          <div key={key}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--origin-fg-default)" }}>{cfg.label}</span>
+                <span style={{ fontSize: "11px", color: "var(--origin-fg-subtle)", fontFamily: "var(--font-mono)" }}>{cfg.filename}</span>
+              </div>
+              <button
+                onClick={() => copy(key, cfg.code)}
+                style={{
+                  display: "flex", alignItems: "center", gap: "5px",
+                  padding: "4px 10px", borderRadius: "6px", fontSize: "12px",
+                  border: "1px solid var(--origin-border-default)",
+                  backgroundColor: copied === key
+                    ? "color-mix(in srgb, var(--origin-semantic-success) 15%, transparent)"
+                    : "transparent",
+                  color: copied === key ? "var(--origin-semantic-success)" : "var(--origin-fg-muted)",
+                  cursor: "pointer", transition: "all 0.15s",
+                }}
+              >
+                {copied === key ? <Check size={11} /> : <Copy size={11} />}
+                {copied === key ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <pre style={{
+              margin: 0, padding: "10px 14px",
+              borderRadius: "8px",
+              border: "1px solid var(--origin-border-default)",
+              backgroundColor: "var(--origin-bg-base)",
+              color: "var(--origin-fg-default)",
+              fontSize: "11px",
+              fontFamily: "var(--font-mono)",
+              lineHeight: "1.65",
+              overflowX: "auto",
+              whiteSpace: "pre",
+            }}>
+              {cfg.code}
+            </pre>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Settings Panel ───────────────────────────────────────────────────────────
 
 interface SettingsPanelProps {
@@ -781,6 +893,12 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               label="Editor"
               onClick={() => setSection("editor")}
             />
+            <NavItem
+              active={section === "terminal"}
+              icon={<Terminal size={14} />}
+              label="Terminal"
+              onClick={() => setSection("terminal")}
+            />
           </div>
 
           {/* Content */}
@@ -790,13 +908,14 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               color: "var(--origin-fg-default)",
               marginBottom: "14px",
             }}>
-              {section === "general" ? "General" : section === "ai" ? "AI Providers" : section === "prompts" ? "System Prompts" : section === "appearance" ? "Appearance" : "Editor"}
+              {section === "general" ? "General" : section === "ai" ? "AI Providers" : section === "prompts" ? "System Prompts" : section === "appearance" ? "Appearance" : section === "editor" ? "Editor" : "Terminal"}
             </div>
             {section === "general"    && <GeneralSection />}
             {section === "ai"         && <AIProvidersSection />}
             {section === "prompts"    && <PromptsSection />}
             {section === "appearance" && <AppearanceSection />}
             {section === "editor"     && <EditorSection />}
+            {section === "terminal"   && <TerminalSection />}
           </div>
         </div>
       </div>

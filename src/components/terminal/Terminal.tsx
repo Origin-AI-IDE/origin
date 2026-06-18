@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import {
   terminalCreate,
@@ -17,6 +18,8 @@ interface Props {
   active: boolean;
   clearKey?: number;
   pendingInput?: string;
+  onCwdChange?: (cwd: string) => void;
+  onShellState?: (state: 'idle' | 'running', exitCode?: number) => void;
 }
 
 function cssVar(name: string): string {
@@ -49,13 +52,17 @@ function buildTheme() {
   };
 }
 
-export default function Terminal({ cwd, active, clearKey, pendingInput }: Props) {
+export default function Terminal({ cwd, active, clearKey, pendingInput, onCwdChange, onShellState }: Props) {
   const { theme } = useTheme();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const xtermRef    = useRef<XTerm | null>(null);
-  const cwdRef      = useRef(cwd);
-  const termIdRef   = useRef<number | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const containerRef    = useRef<HTMLDivElement>(null);
+  const xtermRef        = useRef<XTerm | null>(null);
+  const cwdRef          = useRef(cwd);
+  const termIdRef       = useRef<number | null>(null);
+  const fitAddonRef     = useRef<FitAddon | null>(null);
+  const onCwdChangeRef  = useRef(onCwdChange);
+  const onShellStateRef = useRef(onShellState);
+  onCwdChangeRef.current  = onCwdChange;
+  onShellStateRef.current = onShellState;
 
   useEffect(() => {
     if (!clearKey) return;
@@ -80,6 +87,17 @@ export default function Terminal({ cwd, active, clearKey, pendingInput }: Props)
     fitAddonRef.current = fitAddon;
     xterm.loadAddon(fitAddon);
     xterm.open(containerRef.current);
+
+    // WebGL renderer — falls back to canvas silently if the GPU context is unavailable
+    let webglAddon: WebglAddon | null = null;
+    try {
+      webglAddon = new WebglAddon();
+      webglAddon.onContextLoss(() => { webglAddon?.dispose(); webglAddon = null; });
+      xterm.loadAddon(webglAddon);
+    } catch {
+      webglAddon = null;
+    }
+
     fitAddon.fit();
 
     // Ctrl+Shift+C → copy selection; Ctrl+Shift+V → paste from clipboard.
@@ -101,6 +119,36 @@ export default function Terminal({ cwd, active, clearKey, pendingInput }: Props)
           }).catch(() => {});
         }
         return false;
+      }
+      return true;
+    });
+
+    // OSC 7 — shell reports current working directory
+    const oscDisp7 = xterm.parser.registerOscHandler(7, (data: string) => {
+      try {
+        const url = new URL(data);
+        let path = decodeURIComponent(url.pathname);
+        // Windows: /C:/path → C:\path
+        if (/^\/[A-Za-z]:\//.test(path)) path = path.slice(1).replace(/\//g, '\\');
+        onCwdChangeRef.current?.(path);
+      } catch {
+        onCwdChangeRef.current?.(data);
+      }
+      return true;
+    });
+
+    // OSC 133 — shell integration markers (prompt start / command running / done + exit code)
+    const oscDisp133 = xterm.parser.registerOscHandler(133, (data: string) => {
+      if (data === 'A' || data === 'B') {
+        onShellStateRef.current?.('idle');
+      } else if (data === 'C') {
+        onShellStateRef.current?.('running');
+      } else {
+        const parts = data.split(';');
+        if (parts[0] === 'D') {
+          const code = parts[1] !== undefined ? parseInt(parts[1], 10) : 0;
+          onShellStateRef.current?.('idle', isNaN(code) ? 0 : code);
+        }
       }
       return true;
     });
@@ -146,10 +194,13 @@ export default function Terminal({ cwd, active, clearKey, pendingInput }: Props)
     observer.observe(containerRef.current);
 
     return () => {
+      oscDisp7.dispose();
+      oscDisp133.dispose();
       cleanupOutput?.();
       cleanupExit?.();
       dataDisposable.dispose();
       observer.disconnect();
+      webglAddon?.dispose();
       if (termIdRef.current !== null) {
         terminalClose(termIdRef.current).catch(() => {});
         termIdRef.current = null;

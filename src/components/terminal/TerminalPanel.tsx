@@ -14,6 +14,11 @@ interface TermTab {
   cwd: string;
 }
 
+interface TabShellInfo {
+  state: 'idle' | 'running';
+  exitCode?: number;
+}
+
 export interface TerminalPanelHandle {
   addTab: () => void;
   clearActive: () => void;
@@ -117,6 +122,30 @@ function PanelBtn({
   );
 }
 
+function ShellDot({ info }: { info: TabShellInfo | undefined }) {
+  if (!info) return null;
+  if (info.state === 'running') {
+    return (
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+        backgroundColor: 'var(--origin-accent-blue)',
+        animation: 'pulse 1.2s ease-in-out infinite',
+        display: 'inline-block',
+      }} />
+    );
+  }
+  if (info.exitCode !== undefined) {
+    return (
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+        backgroundColor: info.exitCode === 0 ? 'var(--origin-semantic-success)' : 'var(--origin-semantic-error)',
+        display: 'inline-block',
+      }} />
+    );
+  }
+  return null;
+}
+
 // ── Panel ─────────────────────────────────────────────────────────────────────
 
 const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPanel({ cwd, height, onResize, onClose, hidden }, ref) {
@@ -129,6 +158,8 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
   const prevCwdRef = useRef(cwd);
   const [clearKeys, setClearKeys] = useState<Record<number, number>>({});
   const [pendingInputs, setPendingInputs] = useState<Record<number, string>>({});
+  const [shellInfos, setShellInfos] = useState<Record<number, TabShellInfo>>({});
+  const exitClearTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   // Rename state
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -220,6 +251,11 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
   }
 
   function closeTab(id: number) {
+    if (exitClearTimers.current[id]) {
+      clearTimeout(exitClearTimers.current[id]);
+      delete exitClearTimers.current[id];
+    }
+    setShellInfos(prev => { const c = { ...prev }; delete c[id]; return c; });
     setTabs((prev) => {
       const next = prev.filter((t) => t.id !== id);
       if (next.length === 0) {
@@ -253,6 +289,31 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
 
   function cancelEdit() {
     setEditingId(null);
+  }
+
+  function handleCwdChange(tabId: number, cwd: string) {
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, cwd } : t));
+  }
+
+  function handleShellState(tabId: number, state: 'idle' | 'running', exitCode?: number) {
+    if (exitClearTimers.current[tabId]) {
+      clearTimeout(exitClearTimers.current[tabId]);
+      delete exitClearTimers.current[tabId];
+    }
+    setShellInfos(prev => ({
+      ...prev,
+      [tabId]: { state, exitCode: state === 'idle' ? exitCode : undefined },
+    }));
+    if (state === 'idle' && exitCode === 0) {
+      exitClearTimers.current[tabId] = setTimeout(() => {
+        delete exitClearTimers.current[tabId];
+        setShellInfos(prev => {
+          const info = prev[tabId];
+          if (!info || info.exitCode !== 0) return prev;
+          return { ...prev, [tabId]: { ...info, exitCode: undefined } };
+        });
+      }, 2000);
+    }
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -335,6 +396,7 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
                     (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
                 }}
               >
+                <ShellDot info={shellInfos[tab.id]} />
                 {isEditing ? (
                   <input
                     ref={editInputRef}
@@ -420,7 +482,14 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
               pointerEvents: tab.id === activeId ? "auto" : "none",
             }}
           >
-            <TerminalInstance cwd={tab.cwd} active={tab.id === activeId} clearKey={clearKeys[tab.id] ?? 0} pendingInput={pendingInputs[tab.id]} />
+            <TerminalInstance
+              cwd={tab.cwd}
+              active={tab.id === activeId}
+              clearKey={clearKeys[tab.id] ?? 0}
+              pendingInput={pendingInputs[tab.id]}
+              onCwdChange={(cwd) => handleCwdChange(tab.id, cwd)}
+              onShellState={(state, exitCode) => handleShellState(tab.id, state, exitCode)}
+            />
           </div>
         ))}
       </div>

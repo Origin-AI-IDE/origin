@@ -18,6 +18,8 @@ jobs:
             bundles: nsis,msi
           - os: ubuntu-22.04
             bundles: deb
+          - os: macos-latest
+            bundles: dmg
 
     runs-on: ${{ matrix.os }}
 
@@ -68,6 +70,15 @@ jobs:
         run: |
           gh release upload ${{ github.ref_name }} \
             src-tauri/target/release/bundle/deb/*.deb \
+            --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS artifacts
+        if: matrix.os == 'macos-latest'
+        run: |
+          gh release upload ${{ github.ref_name }} \
+            src-tauri/target/release/bundle/dmg/*.dmg \
             --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

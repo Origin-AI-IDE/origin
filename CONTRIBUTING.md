@@ -17,7 +17,7 @@ Thanks for your interest in contributing. Origin is a desktop IDE built with Tau
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating you agree to uphold it. Report unacceptable behavior to [gsvprharsha@gmail.com](mailto:gsvprharsha@gmail.com).
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). By participating you agree to uphold it. Report unacceptable behavior to [gsvprharsha@gmail.com](mailto:gsvprharsha@gmail.com).
 
 ---
 
@@ -63,26 +63,133 @@ npm run build
 
 ```
 origin/
-├── src/                        # React + TypeScript frontend
-│   ├── components/             # UI components
-│   │   ├── ai/                 # AI panel, chat, providers
-│   │   ├── editor/             # CodeMirror editor, tab bar, diff pane
-│   │   ├── terminal/           # XTerm + PTY panel
-│   │   ├── settings/           # Settings panel
-│   │   └── ui/                 # Shared UI primitives (Toast, Tooltip, etc.)
-│   ├── hooks/                  # Custom React hooks
-│   ├── lib/                    # Core logic (AI, LSP, git, fs, db, agent)
-│   │   └── agent/              # Agentic loop (tools, run, providers)
-│   ├── themes/                 # Theme JSON files
-│   └── context/                # React context (WorkspaceContext)
-├── src-tauri/                  # Rust backend
+├── src/                              # React + TypeScript frontend
+│   ├── App.tsx                       # Root component and app layout
+│   ├── main.tsx                      # Entry point, context providers
+│   ├── index.css                     # Global styles and theme variables
+│   ├── vite-env.d.ts
+│   ├── assets/
+│   │   ├── ai-icons/                 # Provider SVG icons (17 files)
+│   │   └── fonts/                    # Geist Sans + Geist Mono woff2
+│   ├── components/
+│   │   ├── ActivityBar.tsx
+│   │   ├── ContextMenu.tsx
+│   │   ├── FileTree.tsx
+│   │   ├── SearchPanel.tsx
+│   │   ├── Sidebar.tsx
+│   │   ├── SourceTreePanel.tsx
+│   │   ├── StatusBar.tsx
+│   │   ├── StatusIsland.tsx
+│   │   ├── TitleBar.tsx
+│   │   ├── ai/                       # AI panel, chat, providers
+│   │   │   ├── AiPanel.tsx
+│   │   │   ├── ChatBox.tsx
+│   │   │   ├── MarkdownMessage.tsx
+│   │   │   ├── MentionDropdown.tsx
+│   │   │   ├── MessageBubble.tsx
+│   │   │   ├── PlanCard.tsx
+│   │   │   ├── PreferencesDropdown.tsx
+│   │   │   ├── ToolCallCard.tsx
+│   │   │   └── providers.ts
+│   │   ├── editor/                   # CodeMirror editor, tabs, diff, preview
+│   │   │   ├── AiDiffPane.tsx
+│   │   │   ├── Editor.tsx
+│   │   │   ├── EditorEmptyState.tsx
+│   │   │   ├── TabBar.tsx
+│   │   │   ├── WebPreviewPane.tsx
+│   │   │   └── languageSupport.ts
+│   │   ├── onboarding/
+│   │   │   ├── ConnectAIPage.tsx
+│   │   │   ├── Onboarding.tsx
+│   │   │   ├── PersonalizePage.tsx
+│   │   │   ├── WelcomePage.tsx
+│   │   │   └── data.ts
+│   │   ├── palette/
+│   │   │   └── CommandPalette.tsx
+│   │   ├── settings/
+│   │   │   └── SettingsPanel.tsx
+│   │   ├── terminal/                 # XTerm + PTY panel
+│   │   │   ├── Terminal.tsx
+│   │   │   └── TerminalPanel.tsx
+│   │   └── ui/                       # Shared UI primitives
+│   │       ├── DropdownMenu.tsx
+│   │       ├── ErrorBoundary.tsx
+│   │       ├── Toast.tsx
+│   │       └── Tooltip.tsx
+│   ├── context/
+│   │   ├── CommandContext.tsx
+│   │   └── WorkspaceContext.tsx
+│   ├── hooks/
+│   │   ├── useGlobalKeybindings.ts
+│   │   ├── useTabs.ts
+│   │   └── useWorkspacePersistence.ts
+│   ├── lib/                          # Core logic
+│   │   ├── __tests__/
+│   │   ├── agent/                    # Agentic loop (tools, run, providers)
+│   │   │   ├── __tests__/
+│   │   │   ├── planTypes.ts
+│   │   │   ├── providers.ts
+│   │   │   ├── run.ts
+│   │   │   └── tools.ts
+│   │   ├── ai.ts
+│   │   ├── aiAutocomplete.ts
+│   │   ├── aiTypes.ts
+│   │   ├── applyEdit.ts
+│   │   ├── db.ts
+│   │   ├── fileColors.ts
+│   │   ├── fs.ts
+│   │   ├── git.ts
+│   │   ├── hunkControls.ts
+│   │   ├── lsp.ts
+│   │   ├── lspCm6.ts
+│   │   ├── pinboardStore.ts
+│   │   ├── pricing.ts
+│   │   ├── resolvePath.ts
+│   │   ├── resolveTargetPath.ts
+│   │   ├── search.ts
+│   │   ├── secrets.ts
+│   │   ├── sessionStore.ts
+│   │   ├── settings.ts
+│   │   ├── sourceTree.ts
+│   │   ├── system.ts
+│   │   ├── tauri-fetch.ts
+│   │   ├── terminal.ts
+│   │   └── usage.ts
+│   └── themes/
+│       ├── ThemeContext.tsx
+│       ├── applyTheme.ts
+│       ├── types.ts
+│       ├── origin-dark/
+│       │   └── theme.json
+│       └── origin-light/
+│           └── theme.json
+├── src-tauri/                        # Rust backend
 │   ├── src/
-│   │   ├── lib.rs              # All Tauri commands (file, git, terminal, AI)
-│   │   └── lsp.rs              # LSP server harness
-│   ├── capabilities/           # Tauri capability grants
+│   │   ├── lib.rs                    # Entry point, all Tauri command registrations
+│   │   ├── main.rs
+│   │   ├── ai.rs                     # AI streaming proxy
+│   │   ├── fs.rs                     # File system commands
+│   │   ├── git.rs                    # Git commands
+│   │   ├── keychain.rs               # OS keychain (API key storage)
+│   │   ├── lsp.rs                    # LSP server harness
+│   │   ├── search.rs                 # Find-in-files
+│   │   ├── system.rs                 # System info (memory)
+│   │   ├── terminal.rs               # PTY terminal
+│   │   └── tree.rs                   # File tree and source tree
+│   ├── capabilities/
+│   │   └── default.json
+│   ├── icons/                        # App icons (all sizes)
 │   └── Cargo.toml
-├── docs/                       # Project docs and changelog
-└── public/                     # Static assets
+├── docs/                             # Project docs and changelog
+├── media/                            # Marketing assets (logo, mark)
+├── public/                           # Static web assets
+├── .github/                          # CI workflows
+├── eslint.config.js
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── vitest.config.ts
 ```
 
 ---
@@ -160,4 +267,4 @@ If a requested feature is outside the planned roadmap or diverges from the inten
 
 ## License
 
-By contributing you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
