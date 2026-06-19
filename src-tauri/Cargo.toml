@@ -1,6 +1,6 @@
 [package]
 name = "origin"
-version = "0.1.2"
+version = "0.1.3"
 description = "Origin — AI-native code editor"
 authors = ["Origin IDE"]
 edition = "2021"
