@@ -224,6 +224,7 @@ export default function PreferencesDropdown({ anchorEl, selectedModelId, effort,
     const mainHeight = 96; // approximate height of main dropdown
     const spaceBelow = window.innerHeight - r.bottom;
     const top = spaceBelow < mainHeight + 10 ? r.top - mainHeight - 6 : r.bottom + 6;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- position portal from measured anchor rect
     setPos({ top, left: Math.max(8, r.right - MAIN_WIDTH) });
   }, [anchorEl]);
 

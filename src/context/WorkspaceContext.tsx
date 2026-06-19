@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- exports the useWorkspace hook alongside the provider component */
 import { createContext, useContext, useState } from "react";
 
 interface WorkspaceContextType {

@@ -129,8 +129,10 @@ function PlusDropdown({ anchorRef, onNewFile, onOpenFile, onOpenPreview, onClose
       document.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('keydown', handleKey);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- listeners are registered once; anchorRef/onClose are read fresh inside handlers
   }, []);
 
+  // eslint-disable-next-line react-hooks/refs -- anchor rect read for one-shot portal positioning of this menu
   const rect = anchorRef.current?.getBoundingClientRect();
   if (!rect) return null;
 

@@ -205,6 +205,7 @@ function PieChart({ slices, size = 68 }: {
       {slices.map((sl, i) => {
         const sweep = (sl.pct / 100) * Math.PI * 2;
         const start = angle;
+        // eslint-disable-next-line react-hooks/immutability -- local accumulator for cumulative SVG arc angles within this render
         angle += sweep;
         const x1 = cx + r * Math.cos(start), y1 = cy + r * Math.sin(start);
         const x2 = cx + r * Math.cos(angle), y2 = cy + r * Math.sin(angle);
@@ -464,6 +465,7 @@ export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: Sta
 
   // Poll git changes whenever folderPath changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- guard reset when no folder is open
     if (!folderPath) { setGitData(null); prevGitFiles.current = null; return; }
     getGitChanges(folderPath).then(data => {
       setGitData(data);
@@ -476,6 +478,7 @@ export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: Sta
         // Flash island when new changes appear
         if (prevGitFiles.current !== null && data.files > prevGitFiles.current) {
           setBadges(prev => ({ ...prev, changed: (prev.changed ?? 0) + 1 }));
+          // eslint-disable-next-line react-hooks/immutability -- triggerNotifying is a stable arrow declared below; invoked from a polling callback
           triggerNotifying();
         }
         prevGitFiles.current = data.files;
@@ -502,6 +505,7 @@ export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: Sta
     if (!isOpen) return;
     const onMouse = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node))
+        // eslint-disable-next-line react-hooks/immutability -- closeIsland is a stable arrow declared below; invoked from an event handler
         closeIsland();
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeIsland(); };
@@ -511,6 +515,7 @@ export default function StatusIsland({ gitBranch, dirtyCount: _dirtyCount }: Sta
       document.removeEventListener("mousedown", onMouse);
       document.removeEventListener("keydown", onKey);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- closeIsland is stable; only re-register listeners when open state changes
   }, [isOpen]);
 
   // ── Actions ─────────────────────────────────────────────────────────────────

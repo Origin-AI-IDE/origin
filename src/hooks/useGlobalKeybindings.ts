@@ -12,6 +12,7 @@ export function useGlobalKeybindings(handlers: Handlers) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Keep handlers ref current so the single listener always sees the latest callbacks
   const h = useRef(handlers);
+  // eslint-disable-next-line react-hooks/refs -- stable ref pattern: keep latest handlers visible to the single listener
   h.current = handlers;
 
   // Refs so the single useEffect closure always reads current values

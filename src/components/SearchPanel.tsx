@@ -85,6 +85,7 @@ export default function SearchPanel({ onFileOpenAtLine }: Props) {
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (!query.trim() || !folderPath) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- guard reset when query/folder is empty
       setResults([]);
       setLoading(false);
       return;

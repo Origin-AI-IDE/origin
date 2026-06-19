@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- this module exports helper hooks/utilities alongside the editor component */
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -395,6 +396,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     syncBreakpoints(lines: number[], pausedLine: number | null) {
       const view = viewRef.current;
       if (!view) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- heterogeneous CodeMirror StateEffect list
       const effects: import('@codemirror/state').StateEffect<any>[] = [clearBreakpointsEffect.of(null)];
       for (const line of lines) {
         if (line >= 1 && line <= view.state.doc.lines) {
@@ -529,6 +531,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     return () => {
       cancelled = true;
       const v = viewRef.current;
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- lspCompartment is a stable ref, never reassigned
       if (v) v.dispatch({ effects: lspCompartment.current.reconfigure([]) });
     };
   }, [path, rootPath]);
@@ -544,6 +547,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
     });
     view.dispatch({ effects: dapCompartment.current.reconfigure(exts) });
     return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- dapCompartment is a stable ref, never reassigned
       viewRef.current?.dispatch({ effects: dapCompartment.current.reconfigure([]) });
     };
   }, [path]);

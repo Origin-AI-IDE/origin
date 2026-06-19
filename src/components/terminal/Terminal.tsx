@@ -61,7 +61,9 @@ export default function Terminal({ cwd, active, clearKey, pendingInput, onCwdCha
   const fitAddonRef     = useRef<FitAddon | null>(null);
   const onCwdChangeRef  = useRef(onCwdChange);
   const onShellStateRef = useRef(onShellState);
+  // eslint-disable-next-line react-hooks/refs
   onCwdChangeRef.current  = onCwdChange;
+  // eslint-disable-next-line react-hooks/refs
   onShellStateRef.current = onShellState;
 
   useEffect(() => {
@@ -92,13 +94,13 @@ export default function Terminal({ cwd, active, clearKey, pendingInput, onCwdCha
     // Do NOT dispose the addon on context loss: xterm owns the addon lifecycle and will
     // dispose it when xterm.dispose() is called. Disposing it manually here causes a
     // double-dispose crash because xterm's AddonManager still holds a reference.
-    let webglAddon: WebglAddon | null = null;
     try {
-      webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => { webglAddon = null; });
+      const webglAddon = new WebglAddon();
+      // On context loss, xterm's AddonManager handles addon disposal; nothing to do here.
+      webglAddon.onContextLoss(() => {});
       xterm.loadAddon(webglAddon);
     } catch {
-      webglAddon = null;
+      // GPU context unavailable — xterm falls back to the canvas renderer silently.
     }
 
     fitAddon.fit();
@@ -214,7 +216,8 @@ export default function Terminal({ cwd, active, clearKey, pendingInput, onCwdCha
       // torn down, so guard against the resulting crash here.
       try { xterm.dispose(); } catch { /* ignore addon double-dispose on context loss */ }
     };
-  }, []); // intentionally empty — terminal lifecycle is independent of React renders
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- terminal lifecycle is independent of React renders; pendingInput is intentionally captured at mount
+  }, []);
 
   // Re-theme XTerm whenever the IDE theme changes
   useEffect(() => {

@@ -42,11 +42,13 @@ export default function MentionDropdown({ anchorEl, query, onSelect, onClose, ke
   useEffect(() => {
     if (!anchorEl) return;
     const r = anchorEl.getBoundingClientRect();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- position portal from measured anchor rect
     setPos({ top: r.top - 8, left: r.left, width: r.width });
   }, [anchorEl]);
 
   // Sync external query into the search box
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync external query prop into local search state
     setSearch(query);
     setActiveIdx(0);
   }, [query]);

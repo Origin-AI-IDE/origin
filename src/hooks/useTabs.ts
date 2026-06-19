@@ -18,7 +18,9 @@ export function useTabs() {
   // Always-current snapshots used by callbacks that fire before re-render
   const activeTabRef      = useRef<string | null>(activeTab);
   const fileContentsRef   = useRef<Record<string, string>>(fileContents);
+  // eslint-disable-next-line react-hooks/refs -- stable ref pattern: keep current values visible to pre-render callbacks
   activeTabRef.current    = activeTab;
+  // eslint-disable-next-line react-hooks/refs -- stable ref pattern: keep current values visible to pre-render callbacks
   fileContentsRef.current = fileContents;
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export function useTabs() {
         setFileErrors(prev => ({ ...prev, [activeTab]: msg }));
         setFileContents(prev => ({ ...prev, [activeTab]: '' }));
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- showToast is stable; including it would re-run this file-load effect needlessly
   }, [activeTab, fileContents]);
 
   function openTab(path: string) {

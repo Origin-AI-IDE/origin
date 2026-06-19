@@ -211,6 +211,7 @@ export default function TitleBar() {
           }}
         />
 
+        {/* eslint-disable-next-line react-hooks/refs -- each menu's ref is the anchor passed to its portal-positioned button */}
         {menus.map(({ id, label, ref, entries }) => (
           <span key={id} onMouseEnter={() => setOpenMenu(id)}>
             <MenuButton

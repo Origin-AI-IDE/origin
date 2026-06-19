@@ -26,6 +26,7 @@ function ModeDropdown({ anchorEl, selected, onSelect, onClose }: {
   useEffect(() => {
     if (!anchorEl) return;
     const r = anchorEl.getBoundingClientRect();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- position portal from measured anchor rect
     setPos({ left: r.left, top: r.top - 6 });
   }, [anchorEl]);
   useEffect(() => {
@@ -230,6 +231,7 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
 
   useEffect(() => {
     if (!forcedContext) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- snapshot externally-forced context into local state
     setContextSnap(forcedContext);
     setContextDismissed(false);
     onForcedContextConsumed?.();
@@ -350,6 +352,7 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
       {/* @ mention dropdown */}
       {mentionActive && folderPath && (
         <MentionDropdown
+          // eslint-disable-next-line react-hooks/refs -- anchorEl portal pattern: positions dropdown relative to the container
           anchorEl={containerRef.current}
           query={mentionQuery}
           onSelect={handleMentionSelect}
@@ -360,10 +363,12 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
       {/* + attach dropdown (multi-select) */}
       {attachOpen && folderPath && (
         <MentionDropdown
+          // eslint-disable-next-line react-hooks/refs -- anchorEl portal pattern: positions dropdown relative to the container
           anchorEl={containerRef.current}
           query=""
           keepOpen
           attachedPaths={
+            // eslint-disable-next-line react-hooks/refs -- read currently-attached file badges from the editable DOM
             Array.from(editableRef.current?.querySelectorAll('[data-filepath]') ?? [])
               .map(el => (el as HTMLElement).getAttribute('data-filepath')!)
           }
@@ -515,6 +520,7 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
           <ChevronDown size={10} />
         </div>
         {modeOpen && (
+          // eslint-disable-next-line react-hooks/refs -- anchorEl portal pattern: positions dropdown relative to the anchor button
           <ModeDropdown anchorEl={modeAnchorRef.current} selected={mode} onSelect={setMode} onClose={() => setModeOpen(false)} />
         )}
 
@@ -540,6 +546,7 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
 
         {prefsOpen && (
           <PreferencesDropdown
+            // eslint-disable-next-line react-hooks/refs -- anchorEl portal pattern: positions dropdown relative to the anchor button
             anchorEl={prefsAnchorRef.current}
             selectedModelId={selectedModelId}
             effort={effort}

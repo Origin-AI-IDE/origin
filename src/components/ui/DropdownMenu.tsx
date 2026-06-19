@@ -27,6 +27,7 @@ export default function DropdownMenu({ entries, anchorEl, onClose }: Props) {
   useEffect(() => {
     if (!anchorEl) return;
     const r = anchorEl.getBoundingClientRect();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- position portal from measured anchor rect
     setPos({ top: r.bottom + 2, left: r.left });
   }, [anchorEl]);
 

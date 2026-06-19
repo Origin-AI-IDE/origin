@@ -139,6 +139,7 @@ export default function CommandPalette({
   useEffect(() => {
     const isTextMode = query.startsWith('%');
     if (!isTextMode || !folderPath) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- guard reset when not in text-search mode
       setTextResults([]);
       setTextLoading(false);
       return;
@@ -319,9 +320,14 @@ export default function CommandPalette({
   const openGroup = items.filter(i => i.kind === 'open-file');
   const wsGroup   = items.filter(i => i.kind === 'workspace-file');
   const cmdGroup  = items.filter(i => i.kind === 'command');
-  const flat      = isTextMode ? textItems : isFileMode ? fileItems : [...openGroup, ...wsGroup, ...cmdGroup];
+  const flat      = useMemo<PaletteItem[]>(
+    () => isTextMode ? textItems : isFileMode ? fileItems : [...openGroup, ...wsGroup, ...cmdGroup],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openGroup/wsGroup/cmdGroup are derived synchronously from `items`
+    [isTextMode, isFileMode, textItems, fileItems, items],
+  );
   const idxOf     = (item: PaletteItem) => flat.findIndex(i => i.id === item.id);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset selection to top whenever the result set changes
   useEffect(() => { setSelected(0); }, [flat.length, q, isTextMode, isFileMode]);
 
   // Keyboard — capture phase so it beats CM6 and other listeners
@@ -358,6 +364,7 @@ export default function CommandPalette({
         borderRadius: '12px',
         boxShadow: '0 20px 60px rgba(0,0,0,0.55), 0 4px 16px rgba(0,0,0,0.3)',
         overflow: 'hidden',
+        // eslint-disable-next-line react-hooks/refs -- transient drag flag read for cursor styling; re-render is driven by drag state elsewhere
         userSelect: dragRef.current ? 'none' : undefined,
       }}
     >

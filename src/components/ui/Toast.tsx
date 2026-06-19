@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- exports the useToast hook alongside the provider component */
 import { createContext, useContext, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XCircle } from 'lucide-react';

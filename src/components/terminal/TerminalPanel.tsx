@@ -197,7 +197,8 @@ const TerminalPanel = forwardRef<TerminalPanelHandle, Props>(function TerminalPa
         }
       },
     );
-  }, []);  
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- restore once on mount; cwd is intentionally the initial value
+  }, []);
 
   // ── Persist tab list whenever it changes ────────────────────────────────
   useEffect(() => {

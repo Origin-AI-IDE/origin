@@ -135,6 +135,7 @@ export async function dapRequest(
   sessionId: string,
   command: string,
   args: Record<string, unknown> = {},
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DAP response shape is command-specific
 ): Promise<any> {
   return invoke('dap_request', { sessionId, command, arguments: args });
 }
@@ -153,7 +154,9 @@ export async function dapStop(sessionId: string): Promise<void> {
  */
 export async function onDapEvent(
   sessionId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DAP event bodies are protocol-defined and vary per event type
   handler: (msg: { event: string; body?: any; seq: number }) => void,
 ): Promise<UnlistenFn> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Tauri event payload is untyped JSON
   return listen(`dap-event-${sessionId}`, (e) => handler(e.payload as any));
 }

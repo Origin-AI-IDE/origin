@@ -43,6 +43,7 @@ export function Tooltip({ content, children, side = "right", delay = 700 }: Tool
 
   return (
     <>
+      {/* eslint-disable-next-line react-hooks/refs -- cloneElement only attaches event handlers; no ref value is read for rendering */}
       {cloneElement(children, { onMouseEnter: handleMouseEnter, onMouseLeave: handleMouseLeave })}
       {visible && createPortal(
         <div

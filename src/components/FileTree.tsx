@@ -147,6 +147,7 @@ function TreeNode({ entry, depth }: { entry: FsEntry; depth: number }) {
         .then(c => { setChildren(c); setLoaded(true); setExpanded(true); })
         .catch(() => { setLoaded(true); setExpanded(true); });
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- expand node when a child-create is requested
       setExpanded(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -265,6 +266,7 @@ export default function FileTree({ onFileOpen, refreshKey }: Props) {
   }, [folderPath, refreshRoot]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- guard reset when no folder is open
     if (!folderPath) { setRootEntries([]); return; }
     readDir(folderPath).then(setRootEntries).catch(() => setRootEntries([]));
   }, [folderPath, refreshKey]);

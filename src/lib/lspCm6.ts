@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- LSP JSON-RPC payloads are protocol-defined, untyped JSON */
 import { linter, lintGutter } from '@codemirror/lint';
 import { keymap } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';

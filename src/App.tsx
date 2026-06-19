@@ -60,6 +60,7 @@ function App() {
 
   // Once the terminal has been opened, keep it mounted so PTY sessions survive toggle.
   const [terminalMounted, setTerminalMounted] = useState(terminalOpen);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- one-way latch: mount terminal once opened
   useEffect(() => { if (terminalOpen) setTerminalMounted(true); }, [terminalOpen]);
 
   // Auto-hide sidebars when entering live preview; restore on exit.
@@ -77,6 +78,7 @@ function App() {
       setTerminalOpen(prePreviewPanels.current.terminalOpen);
       prePreviewPanels.current = null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to activeTab transitions; panel state is read intentionally fresh
   }, [activeTab]);
 
   const debugCtx = useDebugContext();
@@ -124,7 +126,6 @@ function App() {
       });
       for await (const chunk of result.textStream) yield chunk;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps — reads localStorage lazily at call time
 
   // Persist folderPath to Tauri store (WorkspaceContext handles localStorage)
@@ -132,6 +133,7 @@ function App() {
 
   // Refresh git branch on folder change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- guard reset when no folder is open
     if (!folderPath) { setGitBranch(null); return; }
     getBranch(folderPath).then(setGitBranch).catch(() => setGitBranch(null));
   }, [folderPath]);
@@ -174,6 +176,7 @@ function App() {
   // Wire the debug navigation callback so DebugContext can open/jump to a paused file.
   useEffect(() => {
     debugCtx.setNavigationCallback(openTabAtLine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debugCtx is stable; only re-wire when the callback changes
   }, [openTabAtLine]);
 
   // Push breakpoint + paused-line state into the editor whenever debug session changes.

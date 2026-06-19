@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- exports the useDebugContext hook alongside the provider component */
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 import {
   type DapBreakpoint,
@@ -84,6 +85,7 @@ export function DebugProvider({ children }: { children: React.ReactNode }) {
 
   // Stable refs so closures inside event handlers always see current state
   const sessionRef      = useRef(session);
+  // eslint-disable-next-line react-hooks/refs -- stable ref pattern: keep current session visible to event-handler closures
   sessionRef.current    = session;
   const unlistenRef     = useRef<(() => void) | null>(null);
   const navigationCbRef = useRef<((f: string, l: number, c: number) => void) | null>(null);
@@ -101,6 +103,7 @@ export function DebugProvider({ children }: { children: React.ReactNode }) {
 
   // ── Event handler (wired in Phase 4 — stub logs for now) ─────────────────
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DAP event bodies are protocol-defined and vary per event type
   const handleEvent = useCallback(async (msg: { event: string; body?: any }) => {
     const sid = sessionRef.current.sessionId;
     if (!sid) return;

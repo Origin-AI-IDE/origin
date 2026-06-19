@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- exports the useTheme hook alongside the provider component */
 import { createContext, useContext, useEffect, useState } from "react";
 import type { OriginTheme } from "./types";
 import { applyTheme } from "./applyTheme";
@@ -54,6 +55,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     applyTheme(theme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply persisted theme once on mount; subsequent changes flow through setTheme
   }, []);
 
   return (

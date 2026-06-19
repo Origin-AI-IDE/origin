@@ -77,6 +77,7 @@ export default function SourceTreePanel() {
     return { files: f, history: h };
   }, [folderPath]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load() syncs external git state into React on mount/folder change
   useEffect(() => { load(); }, [load]);
 
   async function refresh() {

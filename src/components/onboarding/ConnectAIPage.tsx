@@ -151,6 +151,7 @@ export default function ConnectAIPage({ onBack, onNext, onSkip }: Props) {
   const filtered = search ? PROVIDERS.filter(p => p.label.toLowerCase().includes(search.toLowerCase())) : PROVIDERS;
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- default the model when the selected provider changes
     if (selected) setSelectedModel(selected.models[0] ?? '');
   }, [selected]);
 

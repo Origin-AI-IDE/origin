@@ -368,6 +368,7 @@ function PromptEditor({ tab }: { tab: PromptTab }) {
 
   useEffect(() => {
     const stored = localStorage.getItem(cfg.storageKey) ?? cfg.defaultValue;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load persisted setting value on mount/config change
     setValue(stored);
     setSaved(stored);
   }, [cfg.storageKey, cfg.defaultValue]);

@@ -415,6 +415,7 @@ export default function AiPanel({
 
   useEffect(() => {
     const fp = folderPath ?? "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load persisted state for the current folder
     setPinnedMessages(pbRead(fp));
     setNotesValue(localStorage.getItem(NOTES_KEY(fp)) ?? "");
   }, [folderPath]);
@@ -442,6 +443,7 @@ export default function AiPanel({
 
   useEffect(() => {
     const fp = folderPath ?? "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load persisted sessions for the current folder
     setSessions(lsForPath(fp));
 
     if (!isFirstFolderEffect.current) {
@@ -900,6 +902,7 @@ export default function AiPanel({
       const { cancel } = runAgent({ model, messages: modelMessages, tools: makeFullTools(), systemPrompt, cacheSystem: providerId === "anthropic", onEvent: handleEvent });
       streamCleanupRef.current = cancel;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getFileContents is read fresh at call time; including it would churn this callback
   }, [showToast]);
 
   const handleNewChat = useCallback(() => {
