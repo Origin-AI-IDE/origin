@@ -7,14 +7,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.2-blue" alt="Version" />
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey" alt="Platform" />
+  <img src="https://img.shields.io/github/v/release/Origin-AI-IDE/origin" alt="Version" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform" />
   <img src="https://img.shields.io/badge/built%20with-Tauri%202-orange" alt="Tauri" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License" />
   <img src="https://github.com/Origin-AI-IDE/origin/actions/workflows/ci.yml/badge.svg" alt="CI" />
 </p>
-
----
 
 ## Screenshots
 
@@ -29,15 +27,11 @@
 <p align="center"><em>Command palette with fuzzy file search and AI panel</em></p>
 </details>
 
----
-
 ## What is Origin?
 
 Origin is a native desktop IDE built on Tauri 2 and React. It combines a full code editor, real terminal, and a deeply integrated AI panel into a single lightweight app. No subscriptions, no telemetry, no cloud lock-in. You bring your API keys; Origin does the rest.
 
 The AI is not a sidebar afterthought. It has full agentic capabilities: it can read files, write code, run shell commands, and propose structured multi-step plans, all with your approval before anything touches disk.
-
----
 
 ## Features
 
@@ -86,8 +80,6 @@ The AI is not a sidebar afterthought. It has full agentic capabilities: it can r
 - Settings panel - API keys, system prompt editor, theme switcher (`Ctrl+,`)
 - Multi-window support
 
----
-
 ## Stack
 
 | Layer | Technology |
@@ -104,8 +96,6 @@ The AI is not a sidebar afterthought. It has full agentic capabilities: it can r
 | Secrets | OS keychain via `keyring` crate |
 | Build | Vite 7 |
 
----
-
 ## Installation
 
 Download the latest release from the [Releases](https://github.com/Origin-AI-IDE/origin/releases) page.
@@ -118,13 +108,17 @@ Download the latest release from the [Releases](https://github.com/Origin-AI-IDE
 | `Origin_x.x.x_x64_en-US.msi` | MSI installer (~7.5 MB)                                                        |
 | `origin.exe`                  | Portable standalone binary (requires WebView2, pre-installed on Windows 10/11) |
 
+**macOS**
+
+| Artifact                  | Description      |
+| ------------------------- | ---------------- |
+| `Origin_x.x.x_x64.dmg`   | macOS disk image |
+
 **Linux**
 
-| Artifact                    | Description          |
-| --------------------------- | -------------------- |
+| Artifact                    | Description           |
+| --------------------------- | --------------------- |
 | `Origin_x.x.x_amd64.deb`   | Debian/Ubuntu package |
-
----
 
 ## Building from Source
 
@@ -137,8 +131,6 @@ npm install
 npm run dev        # dev mode (hot reload)
 npm run build      # full release build + installers
 ```
-
----
 
 ## AI Providers
 
@@ -159,16 +151,12 @@ Origin supports any provider that speaks OpenAI-compatible SSE. Add your API key
 | vLLM | Local | Self-hosted inference server |
 | xAI | Cloud | Grok-2, Grok Beta |
 
----
-
 ## Data & Privacy
 
 - All AI requests route through a local Rust HTTP proxy, no third-party relay
 - API keys live in your OS keychain
 - Chat history is stored in a local SQLite database (`AppData\Roaming\com.originide.ide\`)
-	- No telemetry, no analytics, no accounts
-
----
+- No telemetry, no analytics, no accounts
 
 ## License
 
