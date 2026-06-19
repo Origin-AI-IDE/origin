@@ -88,11 +88,14 @@ export default function Terminal({ cwd, active, clearKey, pendingInput, onCwdCha
     xterm.loadAddon(fitAddon);
     xterm.open(containerRef.current);
 
-    // WebGL renderer — falls back to canvas silently if the GPU context is unavailable
+    // WebGL renderer — falls back to canvas silently if the GPU context is unavailable.
+    // Do NOT dispose the addon on context loss: xterm owns the addon lifecycle and will
+    // dispose it when xterm.dispose() is called. Disposing it manually here causes a
+    // double-dispose crash because xterm's AddonManager still holds a reference.
     let webglAddon: WebglAddon | null = null;
     try {
       webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => { webglAddon?.dispose(); webglAddon = null; });
+      webglAddon.onContextLoss(() => { webglAddon = null; });
       xterm.loadAddon(webglAddon);
     } catch {
       webglAddon = null;
@@ -200,14 +203,16 @@ export default function Terminal({ cwd, active, clearKey, pendingInput, onCwdCha
       cleanupExit?.();
       dataDisposable.dispose();
       observer.disconnect();
-      webglAddon?.dispose();
       if (termIdRef.current !== null) {
         terminalClose(termIdRef.current).catch(() => {});
         termIdRef.current = null;
       }
       fitAddonRef.current = null;
       xtermRef.current = null;
-      xterm.dispose();
+      // xterm.dispose() triggers AddonManager disposal for all loaded addons (including
+      // WebGL). If the GPU context was already lost the addon internals may be partially
+      // torn down, so guard against the resulting crash here.
+      try { xterm.dispose(); } catch { /* ignore addon double-dispose on context loss */ }
     };
   }, []); // intentionally empty — terminal lifecycle is independent of React renders
 

@@ -15,6 +15,7 @@ import TerminalPanel, { type TerminalPanelHandle } from "./components/terminal/T
 import CommandPalette from "./components/palette/CommandPalette";
 import AiPanel from "./components/ai/AiPanel";
 import SettingsPanel from "./components/settings/SettingsPanel";
+import DebugToolbar from "./components/DebugToolbar";
 import { setSetting, pushRecentProject } from "./lib/settings";
 import { useToast } from "./components/ui/Toast";
 import { streamText } from "ai";
@@ -24,6 +25,7 @@ import type { AiCompletionFn } from "./lib/aiAutocomplete";
 import { getBranch } from "./lib/git";
 import { languageLabel } from "./components/editor/languageSupport";
 import { useWorkspace } from "./context/WorkspaceContext";
+import { useDebugContext } from "./context/DebugContext";
 import { CommandContext } from "./context/CommandContext";
 import { useTabs } from "./hooks/useTabs";
 import { useWorkspacePersistence } from "./hooks/useWorkspacePersistence";
@@ -76,6 +78,8 @@ function App() {
       prePreviewPanels.current = null;
     }
   }, [activeTab]);
+
+  const debugCtx = useDebugContext();
 
   const { showToast } = useToast();
   const editorRef      = useRef<EditorHandle>(null);
@@ -166,6 +170,21 @@ function App() {
     pendingDiffRef.current = null;
     editorRef.current.showDiff(pending.code, fileContents[pending.targetPath]);
   }, [activeTab, fileContents, pendingDiffTick]);
+
+  // Wire the debug navigation callback so DebugContext can open/jump to a paused file.
+  useEffect(() => {
+    debugCtx.setNavigationCallback(openTabAtLine);
+  }, [openTabAtLine]);
+
+  // Push breakpoint + paused-line state into the editor whenever debug session changes.
+  useEffect(() => {
+    if (!activeTab || activeTab.startsWith('__')) return;
+    const lines = (debugCtx.session.breakpoints.get(activeTab) ?? []).map(e => e.line);
+    const topFrame = debugCtx.session.stackFrames[0];
+    const pausedLine =
+      topFrame?.source?.path === activeTab ? topFrame.line : null;
+    editorRef.current?.syncBreakpoints(lines, pausedLine);
+  }, [activeTab, debugCtx.session.breakpoints, debugCtx.session.stackFrames]);
 
   const { isFullscreen, toggleFullscreen } = useGlobalKeybindings({
     saveActive:     () => { if (activeTab) handleSave(activeTab); },
@@ -301,6 +320,11 @@ function App() {
     onClearTerminal: () => terminalRef.current?.clearActive(),
     onKillTerminal: () => terminalRef.current?.killActive(),
     onAbout: handleAbout,
+    onStartDebugging: () => {
+      setSidebarOpen(true);
+    },
+    onStopDebugging: () => debugCtx.stopSession(),
+    isDebugActive: debugCtx.session.status !== 'idle' && debugCtx.session.status !== 'terminated',
   };
 
   return (
@@ -331,6 +355,17 @@ function App() {
                   onOpenPreview={openPreviewTab}
                 />
                 <main className="flex-1 flex overflow-hidden" style={{ backgroundColor: "var(--origin-bg-editor)", position: "relative" }}>
+                  {debugCtx.session.status !== 'idle' && debugCtx.session.status !== 'terminated' && (
+                    <DebugToolbar
+                      status={debugCtx.session.status}
+                      onContinue={debugCtx.continueExec}
+                      onStepOver={debugCtx.stepOver}
+                      onStepIn={debugCtx.stepIn}
+                      onStepOut={debugCtx.stepOut}
+                      onPause={debugCtx.pause}
+                      onStop={debugCtx.stopSession}
+                    />
+                  )}
                   {tabs.length === 0 ? (
                     <EditorEmptyState
                       onFolderOpen={setFolderPath}
@@ -362,6 +397,7 @@ function App() {
                       onDefinitionJump={(fp, line, col) => openTabAtLine(fp, line, col)}
                       onMissingServer={handleMissingServer}
                       getAiCompletion={getAiCompletion}
+                      onToggleBreakpoint={(fp, line) => debugCtx.toggleBreakpoint(fp, line)}
                     />
                   ) : activeTab && fileErrors[activeTab] ? (
                     <div className="flex-1 flex flex-col items-center justify-center gap-2">
@@ -421,6 +457,10 @@ function App() {
             col={cursorPositions[activeTab ?? '']?.col ?? 1}
             branch={gitBranch}
             onOpenSettings={() => setSettingsOpen(true)}
+            debugStatus={
+              debugCtx.session.status === 'paused' ? 'paused' :
+              debugCtx.session.status === 'running' ? 'running' : null
+            }
           />
         </>
       )}

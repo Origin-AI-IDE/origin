@@ -3,6 +3,7 @@ import ActivityBar from "./ActivityBar";
 import FileTree from "./FileTree";
 import SearchPanel from "./SearchPanel";
 import SourceTreePanel from "./SourceTreePanel";
+import DebugPanel from "./DebugPanel";
 
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 500;
@@ -32,6 +33,7 @@ function ActivePanel({ id, onFileOpen, onFileOpenAtLine, fileTreeKey }: {
     case "explorer":   return <FileTree onFileOpen={onFileOpen} refreshKey={fileTreeKey} />;
     case "search":     return <SearchPanel onFileOpenAtLine={onFileOpenAtLine} />;
     case "sourcetree": return <SourceTreePanel />;
+    case "debug":      return <DebugPanel onFileOpenAtLine={onFileOpenAtLine} />;
     case "extensions": return <PanelPlaceholder label="Extensions" />;
     default:           return null;
   }

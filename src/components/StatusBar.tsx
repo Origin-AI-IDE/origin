@@ -7,6 +7,7 @@ interface Props {
   col: number;
   branch: string | null;
   onOpenSettings?: () => void;
+  debugStatus?: 'paused' | 'running' | null;
 }
 
 function StatusItem({ children, onClick, title }: { children: React.ReactNode; onClick?: () => void; title?: string }) {
@@ -34,7 +35,7 @@ function StatusItem({ children, onClick, title }: { children: React.ReactNode; o
   );
 }
 
-export default function StatusBar({ language, line, col, branch, onOpenSettings }: Props) {
+export default function StatusBar({ language, line, col, branch, onOpenSettings, debugStatus }: Props) {
   const { theme, themes, setTheme } = useTheme();
   const isDark = theme.type === 'dark';
 
@@ -69,6 +70,17 @@ export default function StatusBar({ language, line, col, branch, onOpenSettings 
           <StatusItem>
             <GitBranch size={11} />
             <span>{branch}</span>
+          </StatusItem>
+        )}
+        {debugStatus && (
+          <StatusItem>
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+              backgroundColor: debugStatus === 'paused'
+                ? 'var(--origin-accent-yellow)'
+                : 'var(--origin-semantic-success)',
+            }} />
+            <span>{debugStatus === 'paused' ? 'Paused' : 'Running'}</span>
           </StatusItem>
         )}
       </div>

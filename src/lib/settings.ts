@@ -10,6 +10,15 @@ export interface SavedTermTab {
   cwd: string;
 }
 
+export interface DebugLastConfig {
+  adapter: string;
+  adapterPath: string;
+  program: string;
+  args: string;
+  cwd: string;
+  stopOnEntry: boolean;
+}
+
 export interface IDESettings {
   'sidebar.open': boolean;
   'sidebar.width': number;
@@ -23,6 +32,7 @@ export interface IDESettings {
   'terminal.height': number;
   'terminal.tabs': SavedTermTab[];
   'terminal.activeIndex': number;
+  'debug.lastLaunchConfig': DebugLastConfig | null;
 }
 
 const DEFAULTS: IDESettings = {
@@ -38,6 +48,7 @@ const DEFAULTS: IDESettings = {
   'terminal.height': 240,
   'terminal.tabs': [],
   'terminal.activeIndex': 0,
+  'debug.lastLaunchConfig': null,
 };
 
 let _store: Store | null = null;

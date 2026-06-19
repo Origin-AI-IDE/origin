@@ -1,4 +1,5 @@
 mod ai;
+mod dap;
 mod fs;
 mod git;
 mod keychain;
@@ -17,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().build())
         .manage(terminal::TerminalState::new())
         .manage(lsp::LspState::new())
+        .manage(dap::DapState::new())
         .invoke_handler(tauri::generate_handler![
             keychain::set_secret,
             keychain::get_secret,
@@ -51,6 +53,9 @@ pub fn run() {
             lsp::lsp_request,
             lsp::lsp_notify,
             lsp::lsp_stop,
+            dap::dap_start,
+            dap::dap_request,
+            dap::dap_stop,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -46,6 +46,10 @@ export interface AppCommands {
   onKillTerminal: () => void;
   // Help
   onAbout: () => void;
+  // Debug
+  onStartDebugging: () => void;
+  onStopDebugging: () => void;
+  isDebugActive: boolean;
 }
 
 const noop = () => {};
@@ -62,6 +66,7 @@ const defaults: AppCommands = {
   onZoomIn: noop, onZoomOut: noop, onZoomReset: noop,
   onNewTerminalTab: noop, onClearTerminal: noop, onKillTerminal: noop,
   onAbout: noop,
+  onStartDebugging: noop, onStopDebugging: noop, isDebugActive: false,
 };
 
 export const CommandContext = createContext<AppCommands>(defaults);

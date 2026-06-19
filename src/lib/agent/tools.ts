@@ -3,6 +3,20 @@ import { z } from "zod";
 import { invoke } from "@tauri-apps/api/core";
 import { resolvePath } from "../resolvePath";
 import { applyEdit } from "../applyEdit";
+import { checkPath } from "./security";
+
+// ── Todo scratchpad ────────────────────────────────────────────────────────────
+//
+// In-memory, per-session task list the agent maintains across a multi-step
+// run. Keyed by session ID; not persisted to disk.
+
+export interface TodoItem {
+  id:      string;                              // short unique id, e.g. "t1", "t2"
+  content: string;                              // description of the task
+  status:  "pending" | "in_progress" | "done";
+}
+
+const todoStore = new Map<string, TodoItem[]>();
 
 // ── Pending action descriptors ─────────────────────────────────────────────────
 
@@ -37,6 +51,8 @@ export function createTools(opts: {
       }),
       execute: async ({ path }) => {
         const resolved = resolvePath(path, folderPath);
+        const guard = checkPath(resolved, "read");
+        if (!guard.ok) return { error: guard.reason };
         try {
           const content = await invoke<string>("read_file", { path: resolved, workspaceRoot: folderPath });
           return { content };
@@ -54,6 +70,8 @@ export function createTools(opts: {
       }),
       execute: async ({ path }) => {
         const resolved = resolvePath(path, folderPath);
+        const guard = checkPath(resolved, "read");
+        if (!guard.ok) return { error: guard.reason };
         try {
           const entries = await invoke<{ name: string; path: string; is_dir: boolean }[]>(
             "read_dir", { path: resolved }
@@ -112,7 +130,8 @@ export function createTools(opts: {
       }),
       execute: async ({ path, content }, { toolCallId }) => {
         const resolved = resolvePath(path, folderPath);
-        // Read the current file so the diff can show what changes
+        const guard = checkPath(resolved, "write");
+        if (!guard.ok) return { error: guard.reason };
         let originalContent = "";
         try {
           originalContent = await invoke<string>("read_file", { path: resolved, workspaceRoot: folderPath });
@@ -149,6 +168,8 @@ export function createTools(opts: {
       }),
       execute: async ({ path, original, updated }, { toolCallId }) => {
         const resolved = resolvePath(path, folderPath);
+        const guard = checkPath(resolved, "write");
+        if (!guard.ok) return { error: guard.reason };
         let fileContent: string;
         try {
           fileContent = await invoke<string>("read_file", { path: resolved, workspaceRoot: folderPath });
@@ -186,6 +207,8 @@ export function createTools(opts: {
         cwd:     z.string().optional().describe("Working directory (defaults to workspace root)"),
       }),
       execute: async ({ command, cwd }, { toolCallId }) => {
+        const guard = checkPath(command, "exec");
+        if (!guard.ok) return { error: guard.reason };
         const resolvedCwd = cwd ? resolvePath(cwd, folderPath) : folderPath;
         return new Promise((resolve) => {
           onApproval({
@@ -207,6 +230,43 @@ export function createTools(opts: {
       },
     }),
 
+    todo_write: tool({
+      description:
+        "Replace the persistent task list for this agent session. Use for any " +
+        "non-trivial multi-step task: keep exactly one item `in_progress` and " +
+        "flip items to `done` as you finish them. Always pass the FULL list — " +
+        "it overwrites the previous one. Auto-executes (no approval).",
+      inputSchema: z.object({
+        sessionId: z.string().describe("Stable id for this agent session"),
+        todos: z.array(
+          z.object({
+            id:      z.string().describe("Short unique id, e.g. \"t1\", \"t2\""),
+            content: z.string().describe("Description of the task"),
+            status:  z.enum(["pending", "in_progress", "done"]),
+          }),
+        ).describe("The complete task list for this session"),
+      }),
+      execute: async ({ sessionId, todos }) => {
+        const items: TodoItem[] = todos.map((t) => ({
+          id: t.id, content: t.content, status: t.status,
+        }));
+        todoStore.set(sessionId, items);
+        return { ok: true, count: items.length };
+      },
+    }),
+
+    todo_read: tool({
+      description:
+        "Read the persistent task list for this agent session. Returns an " +
+        "empty list if nothing has been written yet. Auto-executes (no approval).",
+      inputSchema: z.object({
+        sessionId: z.string().describe("Stable id for this agent session"),
+      }),
+      execute: async ({ sessionId }) => {
+        return { todos: todoStore.get(sessionId) ?? [] };
+      },
+    }),
+
   } as const;
 }
 
@@ -214,7 +274,13 @@ export function createTools(opts: {
 
 export function createReadOnlyTools(opts: { folderPath: string }) {
   const all = createTools({ folderPath: opts.folderPath, onApproval: () => {} });
-  return { read_file: all.read_file, list_directory: all.list_directory, grep: all.grep, glob: all.glob };
+  return {
+    read_file:      all.read_file,
+    list_directory: all.list_directory,
+    grep:           all.grep,
+    glob:           all.glob,
+    todo_read:      all.todo_read,
+  };
 }
 
 // ── Ask mode tools (edit-only, no disk write — diff view handles write-back) ──
@@ -300,4 +366,3 @@ export function createAskTools(opts: {
     }),
   } as const;
 }
-

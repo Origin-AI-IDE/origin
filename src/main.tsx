@@ -6,6 +6,7 @@ import { ThemeProvider } from "./themes/ThemeContext";
 import { WorkspaceProvider } from "./context/WorkspaceContext";
 import { ToastProvider } from "./components/ui/Toast";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
+import { DebugProvider } from "./context/DebugContext";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -13,7 +14,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <ThemeProvider>
         <WorkspaceProvider>
           <ToastProvider>
-            <App />
+            <DebugProvider>
+              <App />
+            </DebugProvider>
           </ToastProvider>
         </WorkspaceProvider>
       </ThemeProvider>

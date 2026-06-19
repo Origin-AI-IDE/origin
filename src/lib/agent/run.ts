@@ -2,6 +2,7 @@ import { streamText, stepCountIs, type ModelMessage, type ToolSet } from "ai";
 import type { LanguageModel } from "ai";
 import type { PendingAction } from "./tools";
 import type { UsageData } from "../ai";
+import { compactHistory } from "./compactHistory";
 
 // ── Event types ────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ export function runAgent(options: RunAgentOptions): { cancel: () => void } {
           : { role: "system", content: systemPrompt }
       ) as ModelMessage;
 
-      const historyMsgs = messages.slice();
+      const historyMsgs = compactHistory(messages.slice());
       if (cacheSystem && historyMsgs.length > 0) {
         const last = historyMsgs[historyMsgs.length - 1];
         const lastWithOptions = last as ModelMessage & { providerOptions?: { anthropic?: Record<string, unknown> } };

@@ -19,6 +19,12 @@ import { createLspExtension } from '../../lib/lspCm6';
 import { getLspLanguage } from '../../lib/lsp';
 import { useToast } from '../ui/Toast';
 import { createAiAutocompleteExtension, type AiCompletionFn } from '../../lib/aiAutocomplete';
+import {
+  createDapExtension,
+  addBreakpointEffect,
+  clearBreakpointsEffect,
+  setPausedLineEffect,
+} from '../../lib/dapCm6';
 
 // ── Syntax token colors — all via CSS variables ────────────────────────────────
 
@@ -211,6 +217,11 @@ export interface EditorHandle {
   paste: () => void;
   selectAll: () => void;
   openFind: () => void;
+  /**
+   * Push debug breakpoint + paused-line state into the editor in one atomic
+   * transaction. Called by App.tsx whenever DebugContext session changes.
+   */
+  syncBreakpoints: (lines: number[], pausedLine: number | null) => void;
 }
 
 interface Props {
@@ -229,12 +240,14 @@ interface Props {
   onMissingServer?: (language: string, installCmd: string) => void;
   // AI inline autocomplete
   getAiCompletion?: AiCompletionFn;
+  // DAP debugging
+  onToggleBreakpoint?: (filePath: string, line: number) => void;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 const Editor = forwardRef<EditorHandle, Props>(function Editor(
-  { path, content, onChange, onCursorChange, initialCursor, jumpTo, onAddToAiContext, onAcceptDiff, onReady, rootPath, onDefinitionJump, onMissingServer, getAiCompletion }, ref
+  { path, content, onChange, onCursorChange, initialCursor, jumpTo, onAddToAiContext, onAcceptDiff, onReady, rootPath, onDefinitionJump, onMissingServer, getAiCompletion, onToggleBreakpoint }, ref
 ) {
   const containerRef   = useRef<HTMLDivElement>(null);
   const viewRef        = useRef<EditorView | null>(null);
@@ -249,9 +262,13 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
   const lspCompartment = useRef(new Compartment());
   // AI autocomplete compartment — first in extensions so its keymap beats indentWithTab
   const autocompleteCompartment = useRef(new Compartment());
+  // DAP breakpoint gutter + paused-line highlight compartment
+  const dapCompartment = useRef(new Compartment());
   // Stable ref — trigger plugin reads .current so it always calls the latest function
   const getAiCompletionRef = useRef(getAiCompletion);
   getAiCompletionRef.current = getAiCompletion;
+  const onToggleBreakpointRef = useRef(onToggleBreakpoint);
+  onToggleBreakpointRef.current = onToggleBreakpoint;
   // Stable ref so the LSP definition callback always sees the current value
   const onDefinitionJumpRef = useRef(onDefinitionJump);
   onDefinitionJumpRef.current = onDefinitionJump;
@@ -374,6 +391,19 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
         .then(text => { view.dispatch(view.state.replaceSelection(text)); })
         .catch(() => { showToast('Clipboard read failed', 'error'); });
     },
+
+    syncBreakpoints(lines: number[], pausedLine: number | null) {
+      const view = viewRef.current;
+      if (!view) return;
+      const effects: import('@codemirror/state').StateEffect<any>[] = [clearBreakpointsEffect.of(null)];
+      for (const line of lines) {
+        if (line >= 1 && line <= view.state.doc.lines) {
+          effects.push(addBreakpointEffect.of(line));
+        }
+      }
+      effects.push(setPausedLineEffect.of(pausedLine));
+      view.dispatch({ effects });
+    },
   }));
 
   function handleAcceptDiff() {
@@ -425,6 +455,7 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
         getLanguageExtension(path),
         mergeCompartment.current.of([]),
         lspCompartment.current.of([]),
+        dapCompartment.current.of([]),
         originBaseTheme,
         EditorView.updateListener.of(update => {
           if (update.docChanged) {
@@ -501,6 +532,21 @@ const Editor = forwardRef<EditorHandle, Props>(function Editor(
       if (v) v.dispatch({ effects: lspCompartment.current.reconfigure([]) });
     };
   }, [path, rootPath]);
+
+  // DAP breakpoint gutter — install/teardown per file path
+  useEffect(() => {
+    if (path.startsWith('__')) return;
+    const view = viewRef.current;
+    if (!view) return;
+    const exts = createDapExtension({
+      filePath: path,
+      onToggleBreakpoint: (line) => onToggleBreakpointRef.current?.(path, line),
+    });
+    view.dispatch({ effects: dapCompartment.current.reconfigure(exts) });
+    return () => {
+      viewRef.current?.dispatch({ effects: dapCompartment.current.reconfigure([]) });
+    };
+  }, [path]);
 
   // Reconfigure autocomplete compartment when the prop goes from undefined ↔ function.
   useEffect(() => {

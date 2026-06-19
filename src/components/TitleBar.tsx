@@ -98,12 +98,14 @@ export default function TitleBar() {
     onZoomIn, onZoomOut, onZoomReset,
     onNewTerminalTab, onClearTerminal, onKillTerminal,
     onAbout,
+    onStartDebugging, onStopDebugging, isDebugActive,
   } = useCommands();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const fileRef     = useRef<HTMLButtonElement>(null);
   const editRef     = useRef<HTMLButtonElement>(null);
   const viewRef     = useRef<HTMLButtonElement>(null);
   const termRef     = useRef<HTMLButtonElement>(null);
+  const runRef      = useRef<HTMLButtonElement>(null);
   const helpRef     = useRef<HTMLButtonElement>(null);
 
   const close = () => setOpenMenu(null);
@@ -152,6 +154,11 @@ export default function TitleBar() {
     { type: 'item', label: 'Reset Zoom', shortcut: 'Ctrl+0', onClick: () => { close(); onZoomReset?.(); } },
   ];
 
+  const runEntries: MenuEntry[] = [
+    { type: 'item', label: 'Start Debugging', shortcut: 'F5', disabled: isDebugActive, onClick: () => { close(); onStartDebugging(); } },
+    { type: 'item', label: 'Stop Debugging',  shortcut: 'Shift+F5', disabled: !isDebugActive, onClick: () => { close(); onStopDebugging(); } },
+  ];
+
   const terminalEntries: MenuEntry[] = [
     { type: 'item', label: terminalOpen ? 'Hide Terminal' : 'Show Terminal', shortcut: 'Ctrl+`', onClick: () => { close(); onToggleTerminal(); } },
     { type: 'separator' },
@@ -178,6 +185,7 @@ export default function TitleBar() {
     { id: 'file',     label: 'File',     ref: fileRef, entries: fileEntries },
     { id: 'edit',     label: 'Edit',     ref: editRef, entries: editEntries },
     { id: 'view',     label: 'View',     ref: viewRef, entries: viewEntries },
+    { id: 'run',      label: 'Run',      ref: runRef,  entries: runEntries },
     { id: 'terminal', label: 'Terminal', ref: termRef, entries: terminalEntries },
     { id: 'help',     label: 'Help',     ref: helpRef, entries: helpEntries },
   ];

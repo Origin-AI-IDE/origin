@@ -1,10 +1,11 @@
-import { Files, Search, GitBranch } from "lucide-react";
+import { Files, Search, GitBranch, Bug } from "lucide-react";
 import { Tooltip } from "./ui/Tooltip";
 
 const items = [
   { id: "explorer",   icon: Files,     label: "Explorer" },
   { id: "search",     icon: Search,    label: "Search" },
   { id: "sourcetree", icon: GitBranch, label: "Source Control" },
+  { id: "debug",      icon: Bug,       label: "Debug" },
 ];
 
 interface ActivityBarProps {
