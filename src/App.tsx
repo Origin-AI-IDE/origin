@@ -23,6 +23,8 @@ import { buildLanguageModel } from "./lib/agent/providers";
 import { loadApiKey } from "./lib/secrets";
 import type { AiCompletionFn } from "./lib/aiAutocomplete";
 import { getBranch } from "./lib/git";
+import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { languageLabel } from "./components/editor/languageSupport";
 import { useWorkspace } from "./context/WorkspaceContext";
 import { useDebugContext } from "./context/DebugContext";
@@ -157,6 +159,26 @@ function App() {
       window.visualViewport?.removeEventListener('resize', notify);
       unlisteners.forEach(fn => fn());
     };
+  }, []);
+
+  // Check for updates once on startup; show a persistent toast if one is available.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount
+  useEffect(() => {
+    checkForUpdate().then(async (update) => {
+      if (!update) return;
+      showToast(`Update available — v${update.version}`, 'info', {
+        label: 'Install & Restart',
+        onClick: async () => {
+          try {
+            showToast('Downloading update...', 'info');
+            await update.downloadAndInstall();
+            await relaunch();
+          } catch {
+            showToast('Update failed. Try again later.', 'error');
+          }
+        },
+      });
+    }).catch(() => { /* offline or no update endpoint configured */ });
   }, []);
 
   // Apply a queued diff once the target tab is active and its content is loaded.

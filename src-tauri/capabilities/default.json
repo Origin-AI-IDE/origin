@@ -18,6 +18,8 @@
     "dialog:default",
     "core:webview:allow-create-webview-window",
     "sql:default",
-    "sql:allow-execute"
+    "sql:allow-execute",
+    "updater:default",
+    "process:allow-relaunch"
   ]
 }

@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 .obsidian
+
+# Tauri signing keys (never commit the literal ~ folder npx created here)
+~/
