@@ -2972,6 +2972,7 @@ dependencies = [
 name = "origin"
 version = "0.1.4"
 dependencies = [
+ "dpi",
  "keyring",
  "portable-pty",
  "reqwest 0.12.28",
@@ -2987,6 +2988,7 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-updater",
  "tokio",
+ "url",
 ]
 
 [[package]]

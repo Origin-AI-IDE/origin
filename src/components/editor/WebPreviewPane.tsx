@@ -1,8 +1,12 @@
-import { useState } from 'react';
-import { RefreshCw, ExternalLink, ArrowLeft, ArrowRight, Globe, PictureInPicture2, X, Smartphone, Tablet, Monitor } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { RefreshCw, ExternalLink, ArrowLeft, ArrowRight, Globe, PictureInPicture2, X, Smartphone, Tablet, Monitor, Loader2 } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { invoke } from '@tauri-apps/api/core';
 import { Tooltip } from '../ui/Tooltip';
+
+// Stable label for the single embedded preview webview.
+const PREVIEW_PANEL_ID = 'origin-web-preview';
 
 const COMMON_PORTS = [
   { port: 5173, label: 'Vite' },
@@ -262,6 +266,10 @@ export default function WebPreviewPane() {
   const [reloadKey, setReloadKey] = useState(0);
   const [viewW, setViewW] = useState<number | null>(null);
   const [viewH, setViewH] = useState<number | null>(null);
+  const [iframeLoading, setIframeLoading] = useState(false);
+
+  // Container that reserves layout space for the native embedded webview.
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const activePreset = detectPreset(viewW, viewH);
 
@@ -279,6 +287,7 @@ export default function WebPreviewPane() {
 
   // Open a fresh URL from the empty-state picker — resets the stack.
   function navigateFresh(to: string) {
+    setIframeLoading(true);
     setHistory([to]);
     setIndex(0);
     setInputUrl(to);
@@ -286,6 +295,7 @@ export default function WebPreviewPane() {
   }
 
   function moveTo(nextIndex: number) {
+    setIframeLoading(true);
     setIndex(nextIndex);
     const to = history[nextIndex];
     setInputUrl(to);
@@ -295,8 +305,7 @@ export default function WebPreviewPane() {
   function handleUrlBarNavigate(raw: string) {
     const next = normalize(raw);
     if (!next) return;
-    // Same URL as current → treat Enter as a reload rather than pushing
-    // a duplicate history entry.
+    setIframeLoading(true);
     if (next === url) {
       setReloadKey(k => k + 1);
       setInputUrl(next);
@@ -331,6 +340,71 @@ export default function WebPreviewPane() {
     });
   }
 
+  // Push the current container geometry to the native webview.
+  const syncBounds = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    void invoke('resize_ide_panel', {
+      panelId: PREVIEW_PANEL_ID,
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
+    }).catch(() => {});
+  }, []);
+
+  // Embed / re-embed the native webview whenever the URL or reload key changes.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!url || !el) return;
+
+    let cancelled = false;
+    setIframeLoading(true);
+
+    const rect = el.getBoundingClientRect();
+    void invoke('embed_ide_panel', {
+      panelId: PREVIEW_PANEL_ID,
+      url,
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
+    })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIframeLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      void invoke('destroy_ide_panel', { panelId: PREVIEW_PANEL_ID }).catch(() => {});
+    };
+  }, [url, reloadKey]);
+
+  // Keep the native webview aligned with the placeholder as it resizes.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!url || !el) return;
+
+    const ro = new ResizeObserver(() => syncBounds());
+    ro.observe(el);
+    window.addEventListener('resize', syncBounds);
+    window.addEventListener('scroll', syncBounds, true);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', syncBounds);
+      window.removeEventListener('scroll', syncBounds, true);
+    };
+  }, [url, viewW, viewH, syncBounds]);
+
+  // Re-sync after preset/dimension changes so the webview tracks the new box.
+  useEffect(() => {
+    if (!url) return;
+    syncBounds();
+  }, [viewW, viewH, url, syncBounds]);
+
   // No URL yet — show picker
   if (url === null) {
     return (
@@ -358,7 +432,7 @@ export default function WebPreviewPane() {
         <div style={{ width: 1, height: 16, background: 'var(--origin-border-default)', flexShrink: 0 }} />
         <NavBtn onClick={handleBack} title="Back" disabled={!canGoBack}><ArrowLeft size={14} /></NavBtn>
         <NavBtn onClick={handleForward} title="Forward" disabled={!canGoForward}><ArrowRight size={14} /></NavBtn>
-        <NavBtn onClick={() => setReloadKey(k => k + 1)} title="Refresh">
+        <NavBtn onClick={() => { setIframeLoading(true); setReloadKey(k => k + 1); }} title="Refresh">
           <RefreshCw size={14} />
         </NavBtn>
 
@@ -451,7 +525,9 @@ export default function WebPreviewPane() {
         </NavBtn>
       </div>
 
-      {/* Iframe wrapper */}
+      {/* Native embedded webview wrapper. The container below is a transparent
+          placeholder that reserves layout space; the real content is a native
+          Tauri webview positioned over it at viewport-relative coordinates. */}
       <div style={{
         flex: 1, overflow: 'auto',
         display: 'flex', justifyContent: 'center',
@@ -459,20 +535,28 @@ export default function WebPreviewPane() {
         backgroundColor: viewW !== null ? 'var(--origin-bg-base)' : 'transparent',
         padding: viewH !== null ? '16px' : 0,
       }}>
-        <iframe
-          key={`${url}-${reloadKey}`}
-          src={url}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-          style={{
-            border: viewW !== null ? '1px solid var(--origin-border-default)' : 'none',
-            width: viewW !== null ? `${viewW}px` : '100%',
-            height: viewH !== null ? `${viewH}px` : '100%',
-            display: 'block',
-            flexShrink: 0,
-            borderRadius: viewW !== null ? '4px' : 0,
-          }}
-          title="Live Preview"
-        />
+        <div style={{
+          position: 'relative',
+          width: viewW !== null ? `${viewW}px` : '100%',
+          height: viewH !== null ? `${viewH}px` : '100%',
+          flexShrink: 0,
+          border: viewW !== null ? '1px solid var(--origin-border-default)' : 'none',
+          borderRadius: viewW !== null ? '4px' : 0,
+          overflow: 'hidden',
+        }}>
+          {/* Placeholder the native webview is anchored to. */}
+          <div ref={containerRef} style={{ width: '100%', height: '100%', background: 'transparent' }} />
+
+          {iframeLoading && (
+            <div style={{
+              position: 'absolute', inset: 0, zIndex: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backgroundColor: 'var(--origin-bg-editor)',
+            }}>
+              <Loader2 size={28} className="animate-spin" style={{ color: 'var(--origin-fg-muted)' }} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
