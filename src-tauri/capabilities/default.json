@@ -20,6 +20,6 @@
     "sql:default",
     "sql:allow-execute",
     "updater:default",
-    "process:allow-relaunch"
+    "process:allow-restart"
   ]
 }

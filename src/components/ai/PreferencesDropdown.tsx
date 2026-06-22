@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, Search } from "lucide-react";
 import { PROVIDERS } from "./providers";
+import { useTheme } from "../../themes/ThemeContext";
 
 type Effort = "normal" | "max";
 
@@ -77,13 +78,14 @@ function ProgressiveBlur({ direction, size = 36 }: { direction: "top" | "bottom"
 
 // ── Model submenu ─────────────────────────────────────────────────────────────
 
-function ModelSubmenu({ pos, selectedModelId, onSelect, onClose }: {
+const ModelSubmenu = forwardRef<HTMLDivElement, {
   pos: { top: number; left: number };
   selectedModelId: string;
   onSelect: (providerId: string, modelId: string) => void;
   onClose: () => void;
-}) {
-  const menuRef = useRef<HTMLDivElement>(null);
+}>(function ModelSubmenu({ pos, selectedModelId, onSelect, onClose }, ref) {
+  const { theme } = useTheme();
+  const isDark = theme.type === "dark";
   const searchRef = useRef<HTMLInputElement>(null);
   const providerScrollRef = useRef<HTMLDivElement>(null);
   const [canScrollUp, setCanScrollUp] = useState(false);
@@ -119,7 +121,7 @@ function ModelSubmenu({ pos, selectedModelId, onSelect, onClose }: {
 
   return (
     <div
-      ref={menuRef}
+      ref={ref}
       style={{
         position: "fixed", top: pos.top, left: pos.left,
         width: SUB_WIDTH, height: SUB_HEIGHT,
@@ -148,7 +150,7 @@ function ModelSubmenu({ pos, selectedModelId, onSelect, onClose }: {
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent"; }}
               >
                 {p.icon
-                  ? <img src={p.icon} alt={p.name} style={{ width: 20, height: 20, objectFit: "contain", filter: p.invert ? "brightness(0) invert(1)" : "none" }} />
+                  ? <img src={p.icon} alt={p.name} style={{ width: 20, height: 20, objectFit: "contain", filter: p.invert ? (isDark ? "brightness(0) invert(1)" : "none") : "none" }} />
                   : <div style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: p.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: p.textColor }}>{p.initial}</div>
                 }
               </button>
@@ -193,7 +195,7 @@ function ModelSubmenu({ pos, selectedModelId, onSelect, onClose }: {
               >
                 <div style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   {(m.icon ?? activeProvider.icon)
-                    ? <img src={m.icon ?? activeProvider.icon!} alt={m.name} style={{ width: 22, height: 22, objectFit: "contain", filter: (m.iconInvert ?? activeProvider.invert) ? "brightness(0) invert(1)" : "none" }} />
+                    ? <img src={m.icon ?? activeProvider.icon!} alt={m.name} style={{ width: 22, height: 22, objectFit: "contain", filter: (m.iconInvert ?? activeProvider.invert) ? (isDark ? "brightness(0) invert(1)" : "none") : "none" }} />
                     : <span style={{ fontSize: 9, fontWeight: 700, color: "var(--origin-fg-muted)" }}>{activeProvider.initial}</span>
                   }
                 </div>
@@ -209,12 +211,13 @@ function ModelSubmenu({ pos, selectedModelId, onSelect, onClose }: {
       </div>
     </div>
   );
-}
+});
 
 // ── Main dropdown ─────────────────────────────────────────────────────────────
 
 export default function PreferencesDropdown({ anchorEl, selectedModelId, effort, onSelect, onEffortChange, onClose }: Props) {
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuRef    = useRef<HTMLDivElement>(null);
+  const subMenuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const [modelOpen, setModelOpen] = useState(false);
 
@@ -230,7 +233,9 @@ export default function PreferencesDropdown({ anchorEl, selectedModelId, effort,
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+      const inMain = menuRef.current?.contains(e.target as Node);
+      const inSub  = subMenuRef.current?.contains(e.target as Node);
+      if (!inMain && !inSub) onClose();
     }
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
     document.addEventListener("mousedown", onDown);
@@ -297,6 +302,7 @@ export default function PreferencesDropdown({ anchorEl, selectedModelId, effort,
 
       {modelOpen && (
         <ModelSubmenu
+          ref={subMenuRef}
           pos={subPos}
           selectedModelId={selectedModelId}
           onSelect={onSelect}

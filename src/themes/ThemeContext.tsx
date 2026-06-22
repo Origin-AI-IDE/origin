@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- exports the useTheme hook alongside the provider component */
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 import type { OriginTheme } from "./types";
 import { applyTheme } from "./applyTheme";
 
@@ -35,7 +35,11 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<OriginTheme>(resolveDefaultTheme);
+  const [theme, setThemeState] = useState<OriginTheme>(() => {
+    const t = resolveDefaultTheme();
+    applyTheme(t); // apply synchronously so CSS vars are set before any child effect reads them
+    return t;
+  });
 
   function setTheme(t: OriginTheme) {
     setThemeState(t);
@@ -52,11 +56,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to load theme:", e);
     }
   }
-
-  useEffect(() => {
-    applyTheme(theme);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply persisted theme once on mount; subsequent changes flow through setTheme
-  }, []);
 
   return (
     <ThemeContext.Provider value={{ theme, themes: builtinThemes, setTheme, loadThemeFromJson }}>

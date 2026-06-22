@@ -9,7 +9,6 @@ import cohereColorIcon from '../../assets/ai-icons/cohere-color.svg';
 import xaiIcon         from '../../assets/ai-icons/xai.svg';
 import ollamaIcon      from '../../assets/ai-icons/ollama.svg';
 import claudeColorIcon from '../../assets/ai-icons/claude-color.svg';
-import geminiIcon      from '../../assets/ai-icons/gemini.svg';
 import metaColorIcon   from '../../assets/ai-icons/meta-color.svg';
 
 export const DEFAULT_MODEL_ID    = 'claude-sonnet-4-6';
@@ -73,8 +72,8 @@ export const PROVIDERS: AIProvider[] = [
     color: '#4285f4',
     textColor: '#ffffff',
     models: [
-      { id: 'gemini-2.5-pro',   name: 'Gemini 2.5 Pro',   description: 'Most capable Gemini model', color: '#3b82f6', icon: geminiIcon },
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Fast multimodal model',     color: '#6366f1', icon: geminiIcon },
+      { id: 'gemini-2.5-pro',   name: 'Gemini 2.5 Pro',   description: 'Most capable Gemini model', color: '#3b82f6', icon: geminiColorIcon },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Fast multimodal model',     color: '#6366f1', icon: geminiColorIcon },
     ],
   },
   {
