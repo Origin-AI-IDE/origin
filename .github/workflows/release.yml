@@ -144,18 +144,11 @@ jobs:
                   "url": f"{base_url}/origin_{version}_amd64.AppImage"
               }
 
-          sig = read_sig(f"*aarch64.app.tar.gz.sig")
+          sig = read_sig(f"*.app.tar.gz.sig")
           if sig:
               platforms["darwin-aarch64"] = {
                   "signature": sig,
-                  "url": f"{base_url}/Origin_aarch64.app.tar.gz"
-              }
-
-          sig = read_sig(f"*x64.app.tar.gz.sig")
-          if sig:
-              platforms["darwin-x86_64"] = {
-                  "signature": sig,
-                  "url": f"{base_url}/Origin_x64.app.tar.gz"
+                  "url": f"{base_url}/Origin.app.tar.gz"
               }
 
           manifest = {
