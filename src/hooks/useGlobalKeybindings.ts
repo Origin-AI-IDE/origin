@@ -1,29 +1,40 @@
 import { useState, useEffect, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCommandKeyMap, matchesEvent } from "../lib/keybindings";
 
-interface Handlers {
+export interface GlobalHandlers {
+  // Always provided
   saveActive:     () => void;
   toggleTerminal: () => void;
   togglePalette:  () => void;
   toggleSettings: () => void;
+  // Optional — wired when available in App.tsx
+  newFile?:          () => void;
+  openFile?:         () => void;
+  closeTab?:         () => void;
+  toggleSidebar?:    () => void;
+  zoomIn?:           () => void;
+  zoomOut?:          () => void;
+  zoomReset?:        () => void;
+  startDebug?:       () => void;
+  stopDebug?:        () => void;
+  stepOver?:         () => void;
+  stepInto?:         () => void;
+  stepOut?:          () => void;
+  toggleBreakpoint?: () => void;
 }
 
-export function useGlobalKeybindings(handlers: Handlers) {
+export function useGlobalKeybindings(handlers: GlobalHandlers) {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  // Keep handlers ref current so the single listener always sees the latest callbacks
   const h = useRef(handlers);
-  // eslint-disable-next-line react-hooks/refs -- stable ref pattern: keep latest handlers visible to the single listener
   h.current = handlers;
 
-  // Refs so the single useEffect closure always reads current values
   const isFullscreenRef = useRef(false);
   const wasMaximizedRef = useRef(false);
 
   async function toggleFullscreen() {
     const win = getCurrentWindow();
     if (!isFullscreenRef.current) {
-      // Unmaximize before entering fullscreen — frameless + WebView2 bug: going
-      // fullscreen from a maximized state leaves a black bar (tauri-apps/tauri#11788)
       const maximized = await win.isMaximized();
       wasMaximizedRef.current = maximized;
       if (maximized) {
@@ -46,29 +57,60 @@ export function useGlobalKeybindings(handlers: Handlers) {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      const ctrl = e.ctrlKey || e.metaKey;
-      if (ctrl && e.key === 's')               { e.preventDefault(); h.current.saveActive();     return; }
-      if (e.key === 'F11')                     { e.preventDefault(); toggleFullscreen();          return; }
-      if (ctrl && e.key === '`')               { e.preventDefault(); h.current.toggleTerminal();  return; }
-      if (ctrl && !e.shiftKey && e.key === 'p'){ e.preventDefault(); h.current.togglePalette();   return; }
-      if (ctrl && e.key === ',')               { e.preventDefault(); h.current.toggleSettings();  return; }
+      // Read the live keymap on every event so custom bindings apply immediately
+      // without a page reload (localStorage is synchronous).
+      const km = getCommandKeyMap();
+
+      // Build the handler dispatch table — maps command ID → action fn
+      const dispatch: Record<string, (() => void) | undefined> = {
+        "origin.save":             () => h.current.saveActive(),
+        "origin.toggleTerminal":   () => h.current.toggleTerminal(),
+        "origin.togglePalette":    () => h.current.togglePalette(),
+        "origin.toggleSettings":   () => h.current.toggleSettings(),
+        "origin.toggleFullscreen": () => toggleFullscreen(),
+        "origin.newFile":          () => h.current.newFile?.(),
+        "origin.openFile":         () => h.current.openFile?.(),
+        "origin.closeTab":         () => h.current.closeTab?.(),
+        "origin.toggleSidebar":    () => h.current.toggleSidebar?.(),
+        "origin.zoomIn":           () => h.current.zoomIn?.(),
+        "origin.zoomOut":          () => h.current.zoomOut?.(),
+        "origin.zoomReset":        () => h.current.zoomReset?.(),
+        "origin.startDebug":       () => h.current.startDebug?.(),
+        "origin.stopDebug":        () => h.current.stopDebug?.(),
+        "origin.stepOver":         () => h.current.stepOver?.(),
+        "origin.stepInto":         () => h.current.stepInto?.(),
+        "origin.stepOut":          () => h.current.stepOut?.(),
+        "origin.toggleBreakpoint": () => h.current.toggleBreakpoint?.(),
+      };
+
+      for (const [cmdId, keyStr] of Object.entries(km)) {
+        if (!keyStr) continue;
+        const handler = dispatch[cmdId];
+        if (!handler) continue;
+        if (matchesEvent(e, keyStr)) {
+          e.preventDefault();
+          handler();
+          return;
+        }
+      }
     }
-    window.addEventListener('keydown', onKeyDown);
+
+    window.addEventListener("keydown", onKeyDown);
 
     let unlistenResized: (() => void) | undefined;
     let unlistenScale:   (() => void) | undefined;
 
     getCurrentWindow().onResized(() => {
-      window.dispatchEvent(new Event('resize'));
+      window.dispatchEvent(new Event("resize"));
     }).then(fn => { unlistenResized = fn; });
 
     getCurrentWindow().onScaleChanged(({ payload: scaleFactor }) => {
-      document.documentElement.style.setProperty('--scale-factor', String(scaleFactor));
-      window.dispatchEvent(new Event('resize'));
+      document.documentElement.style.setProperty("--scale-factor", String(scaleFactor));
+      window.dispatchEvent(new Event("resize"));
     }).then(fn => { unlistenScale = fn; });
 
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener("keydown", onKeyDown);
       unlistenResized?.();
       unlistenScale?.();
     };

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import { THEMES, KEYMAPS, IMPORTS, type ThemeOption, type KeymapOption, type ImportOption } from './data';
 import { useTheme } from '../../themes/ThemeContext';
+import { applyKeybindingsFromEditor } from '../../lib/keybindings';
 
 interface Props { onBack: () => void; onComplete: () => void; onSkip: () => void; }
 
@@ -87,12 +88,35 @@ export default function PersonalizePage({ onBack, onComplete, onSkip }: Props) {
   const [selectedTheme,  setSelectedTheme]  = useState<string>('dark');
   const [selectedKeymap, setSelectedKeymap] = useState<string>('vscode');
   const [selectedImport, setSelectedImport] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   function handleThemeSelect(id: 'dark' | 'light') {
     setSelectedTheme(id);
     const name = id === 'dark' ? 'Origin Dark' : 'Origin Light';
     const t = themes.find(t => t.name === name);
     if (t) setTheme(t);
+  }
+
+  // Persist the keymap preference so Settings can read it later
+  function persistKeymap(id: string) {
+    localStorage.setItem('origin-keymap', id);
+  }
+
+  async function handleEnterOrigin() {
+    persistKeymap(selectedKeymap);
+
+    if (selectedImport) {
+      setImporting(true);
+      try {
+        await applyKeybindingsFromEditor(selectedImport);
+      } catch {
+        // Import failure is non-fatal — proceed to IDE anyway
+      } finally {
+        setImporting(false);
+      }
+    }
+
+    onComplete();
   }
 
   return (
@@ -117,16 +141,29 @@ export default function PersonalizePage({ onBack, onComplete, onSkip }: Props) {
           <div>
             <div style={sectionLabel}>Keymap</div>
             <div style={{ display: 'flex', gap: '12px' }}>
-              {KEYMAPS.map(k => <SelectCard key={k.id} label={k.label} selected={selectedKeymap === k.id} onClick={() => setSelectedKeymap(k.id)}><KeymapPreview k={k} /></SelectCard>)}
+              {KEYMAPS.map(k => (
+                <SelectCard key={k.id} label={k.label} selected={selectedKeymap === k.id} onClick={() => setSelectedKeymap(k.id)}>
+                  <KeymapPreview k={k} />
+                </SelectCard>
+              ))}
             </div>
           </div>
 
           {/* Import */}
           <div>
-            <div style={sectionLabel}>Import settings from</div>
+            <div style={sectionLabel}>Import keybindings from</div>
             <div style={{ display: 'flex', gap: '12px' }}>
-              {IMPORTS.map(imp => <SelectCard key={imp.id} label={imp.label} selected={selectedImport === imp.id} onClick={() => setSelectedImport(selectedImport === imp.id ? null : imp.id)}><ImportPreview imp={imp} /></SelectCard>)}
+              {IMPORTS.map(imp => (
+                <SelectCard key={imp.id} label={imp.label} selected={selectedImport === imp.id} onClick={() => setSelectedImport(selectedImport === imp.id ? null : imp.id)}>
+                  <ImportPreview imp={imp} />
+                </SelectCard>
+              ))}
             </div>
+            {selectedImport && (
+              <p style={{ fontSize: '12px', color: 'var(--origin-fg-subtle)', margin: '8px 0 0', lineHeight: 1.5 }}>
+                Your keybindings.json from {IMPORTS.find(i => i.id === selectedImport)?.label} will be imported. You can always adjust them later in Settings → Keyboard Shortcuts.
+              </p>
+            )}
           </div>
 
           {/* Footer */}
@@ -142,6 +179,7 @@ export default function PersonalizePage({ onBack, onComplete, onSkip }: Props) {
             <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 onClick={onBack}
+                disabled={importing}
                 style={navBtn(true)}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--origin-fg-default)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--origin-fg-muted)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--origin-fg-muted)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--origin-border-default)'; }}
@@ -149,12 +187,17 @@ export default function PersonalizePage({ onBack, onComplete, onSkip }: Props) {
                 <ArrowLeft size={16} />Back
               </button>
               <button
-                onClick={onComplete}
-                style={navBtn()}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                onClick={handleEnterOrigin}
+                disabled={importing}
+                style={{ ...navBtn(), opacity: importing ? 0.7 : 1 }}
+                onMouseEnter={e => { if (!importing) (e.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = importing ? '0.7' : '1'; }}
               >
-                Enter Origin<ArrowRight size={16} />
+                {importing ? (
+                  <><Loader2 size={15} className="animate-spin" />Importing…</>
+                ) : (
+                  <>Enter Origin<ArrowRight size={16} /></>
+                )}
               </button>
             </div>
           </div>

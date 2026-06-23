@@ -7,12 +7,26 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/Origin-AI-IDE/origin" alt="Version" />
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform" />
-  <img src="https://img.shields.io/badge/built%20with-Tauri%202-orange" alt="Tauri" />
-  <img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License" />
-  <img src="https://github.com/Origin-AI-IDE/origin/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  <a href="https://github.com/Origin-AI-IDE/origin/releases">
+    <img src="https://img.shields.io/github/v/release/Origin-AI-IDE/origin" alt="Version" />
+  </a>
+  <a href="https://github.com/Origin-AI-IDE/origin/releases">
+    <img src="https://img.shields.io/github/downloads/Origin-AI-IDE/origin/total?color=2ea043" alt="Downloads" />
+  </a>
+  <a href="https://github.com/Origin-AI-IDE/origin">
+    <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform" />
+  </a>
+  <a href="https://tauri.app/">
+    <img src="https://img.shields.io/badge/built%20with-Tauri%202-orange" alt="Tauri" />
+  </a>
+  <a href="https://github.com/Origin-AI-IDE/origin/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License" />
+  </a>
+  <a href="https://github.com/Origin-AI-IDE/origin/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Origin-AI-IDE/origin/ci.yml?branch=main&label=build" alt="CI" />
+  </a>
 </p>
+
 
 ## Screenshots
 

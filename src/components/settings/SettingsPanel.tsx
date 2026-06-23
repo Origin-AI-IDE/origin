@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, Eye, EyeOff, Bot, Palette, Check, MessageSquareDot, SlidersHorizontal, Terminal, Copy } from "lucide-react";
+import { X, Eye, EyeOff, Bot, Palette, Check, MessageSquareDot, SlidersHorizontal, Terminal, Copy, Keyboard } from "lucide-react";
+import KeybindingsSection from "./KeybindingsSection";
 import { PROVIDERS } from "../ai/providers";
 import { loadApiKey, saveApiKey, deleteApiKey } from "../../lib/secrets";
 import { useTheme } from "../../themes/ThemeContext";
@@ -11,7 +12,7 @@ import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ASK_PROMPT, DEFAULT_PLAN_PROMPT } from "
 const LOCAL_IDS = new Set(["ollama", "lmstudio", "vllm"]);
 const API_PROVIDERS = PROVIDERS.filter(p => !LOCAL_IDS.has(p.id));
 
-type Section = "general" | "ai" | "prompts" | "appearance" | "terminal";
+type Section = "general" | "ai" | "prompts" | "appearance" | "terminal" | "keybindings";
 
 // ── Nav ──────────────────────────────────────────────────────────────────────
 
@@ -879,6 +880,12 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               label="Terminal"
               onClick={() => setSection("terminal")}
             />
+            <NavItem
+              active={section === "keybindings"}
+              icon={<Keyboard size={14} />}
+              label="Keyboard Shortcuts"
+              onClick={() => setSection("keybindings")}
+            />
           </div>
 
           {/* Content */}
@@ -888,13 +895,14 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               color: "var(--origin-fg-default)",
               marginBottom: "14px",
             }}>
-              {section === "general" ? "General" : section === "ai" ? "AI Providers" : section === "prompts" ? "System Prompts" : section === "appearance" ? "Appearance" : "Terminal"}
+              {section === "general" ? "General" : section === "ai" ? "AI Providers" : section === "prompts" ? "System Prompts" : section === "appearance" ? "Appearance" : section === "keybindings" ? "Keyboard Shortcuts" : "Terminal"}
             </div>
             {section === "general"    && <GeneralSection />}
             {section === "ai"         && <AIProvidersSection />}
             {section === "prompts"    && <PromptsSection />}
             {section === "appearance" && <AppearanceSection />}
-            {section === "terminal"   && <TerminalSection />}
+            {section === "terminal"      && <TerminalSection />}
+            {section === "keybindings"  && <KeybindingsSection />}
           </div>
         </div>
       </div>

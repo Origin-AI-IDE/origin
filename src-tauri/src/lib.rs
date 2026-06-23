@@ -82,6 +82,15 @@ async fn destroy_ide_panel(
     Ok(())
 }
 
+#[tauri::command]
+async fn get_ide_panel_url(app: AppHandle, panel_id: String) -> Result<String, String> {
+    if let Some(webview) = app.get_webview(&panel_id) {
+        webview.url().map(|u| u.to_string()).map_err(|e| e.to_string())
+    } else {
+        Err("panel not found".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -105,6 +114,8 @@ pub fn run() {
             fs::delete_path,
             fs::create_dir_cmd,
             fs::reveal_in_explorer,
+            fs::read_editor_keybindings,
+            fs::detect_installed_editors,
             git::git_branch,
             git::git_changes,
             git::git_status_files,
@@ -134,6 +145,7 @@ pub fn run() {
             embed_ide_panel,
             resize_ide_panel,
             destroy_ide_panel,
+            get_ide_panel_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

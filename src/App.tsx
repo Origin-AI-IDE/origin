@@ -212,10 +212,22 @@ function App() {
   }, [activeTab, debugCtx.session.breakpoints, debugCtx.session.stackFrames]);
 
   const { isFullscreen, toggleFullscreen } = useGlobalKeybindings({
-    saveActive:     () => { if (activeTab) handleSave(activeTab); },
-    toggleTerminal: () => setTerminalOpen(v => !v),
-    togglePalette:  () => setPaletteOpen(v => !v),
-    toggleSettings: () => setSettingsOpen(v => !v),
+    saveActive:        () => { if (activeTab) handleSave(activeTab); },
+    toggleTerminal:    () => setTerminalOpen(v => !v),
+    togglePalette:     () => setPaletteOpen(v => !v),
+    toggleSettings:    () => setSettingsOpen(v => !v),
+    newFile:           () => handleNewFile(),
+    openFile:          () => handleOpenFile(),
+    closeTab:          () => { if (activeTab) closeTab(activeTab); },
+    toggleSidebar:     () => setSidebarOpen(v => !v),
+    zoomIn:            () => handleZoomIn(),
+    zoomOut:           () => handleZoomOut(),
+    zoomReset:         () => handleZoomReset(),
+    startDebug:        () => { setSidebarOpen(true); debugCtx.startSession?.(); },
+    stopDebug:         () => debugCtx.stopSession(),
+    stepOver:          () => debugCtx.stepOver?.(),
+    stepInto:          () => debugCtx.stepIn?.(),
+    stepOut:           () => debugCtx.stepOut?.(),
   });
 
   async function completeOnboarding() {

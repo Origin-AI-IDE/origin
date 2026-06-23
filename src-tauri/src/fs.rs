@@ -90,6 +90,68 @@ pub fn create_dir_cmd(path: String) -> Result<(), String> {
     std::fs::create_dir_all(&path).map_err(|e| e.to_string())
 }
 
+/// Returns the config base directory for a known editor on the current OS.
+/// e.g. editor_config_dir("Code") → C:\Users\<user>\AppData\Roaming\Code
+fn editor_config_dir(folder_name: &str) -> Result<std::path::PathBuf, String> {
+    #[cfg(windows)]
+    {
+        let appdata = std::env::var("APPDATA").map_err(|_| "APPDATA not set".to_string())?;
+        Ok(std::path::PathBuf::from(appdata).join(folder_name))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
+        Ok(std::path::PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join(folder_name))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let config = std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_default();
+            format!("{home}/.config")
+        });
+        Ok(std::path::PathBuf::from(config).join(folder_name))
+    }
+}
+
+fn editor_folder(id: &str) -> Option<&'static str> {
+    match id {
+        "vscode"   => Some("Code"),
+        "cursor"   => Some("Cursor"),
+        "windsurf" => Some("Windsurf"),
+        _          => None,
+    }
+}
+
+/// Read the keybindings.json for a given editor (vscode | cursor | windsurf).
+#[tauri::command]
+pub fn read_editor_keybindings(editor: String) -> Result<String, String> {
+    let folder = editor_folder(&editor)
+        .ok_or_else(|| format!("Unknown editor: {editor}"))?;
+    let path = editor_config_dir(folder)?
+        .join("User")
+        .join("keybindings.json");
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Could not read {}: {e}", path.display()))
+}
+
+/// Returns which of vscode / cursor / windsurf have a keybindings.json on disk.
+#[tauri::command]
+pub fn detect_installed_editors() -> Vec<String> {
+    ["vscode", "cursor", "windsurf"]
+        .iter()
+        .filter(|&&id| {
+            editor_folder(id)
+                .and_then(|f| editor_config_dir(f).ok())
+                .map(|p| p.join("User").join("keybindings.json").exists())
+                .unwrap_or(false)
+        })
+        .map(|s| s.to_string())
+        .collect()
+}
+
 #[tauri::command]
 pub fn reveal_in_explorer(path: String) -> Result<(), String> {
     #[cfg(windows)]
