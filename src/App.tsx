@@ -97,6 +97,12 @@ function App() {
   const [paletteOpen,    setPaletteOpen]   = useState(false);
   const [settingsOpen,   setSettingsOpen]  = useState(false);
   const [aboutOpen,      setAboutOpen]     = useState(false);
+  const [debugPanelRequest, setDebugPanelRequest] = useState(0);
+
+  const openDebugPanel = () => {
+    setSidebarOpen(true);
+    setDebugPanelRequest(request => request + 1);
+  };
 
   // Stable async-generator callback for AI inline autocomplete.
   // Reads localStorage at call time so model/provider/enabled changes take effect immediately.
@@ -143,6 +149,13 @@ function App() {
   // Poke CodeMirror + xterm to re-measure after window geometry changes
   useEffect(() => {
     const unlisteners: Array<() => void> = [];
+    let disposed = false;
+    const registerUnlistener = (promise: Promise<() => void>) => {
+      promise.then(unlisten => {
+        if (disposed) unlisten();
+        else unlisteners.push(unlisten);
+      }).catch(error => console.error("[App] Failed to register window resize listener:", error));
+    };
     let raf = 0;
     const notify = () => {
       cancelAnimationFrame(raf);
@@ -151,10 +164,11 @@ function App() {
       });
     };
     const win = getCurrentWindow();
-    win.onResized(notify).then(fn => unlisteners.push(fn));
-    win.listen('tauri://resize', notify).then(fn => unlisteners.push(fn));
+    registerUnlistener(win.onResized(notify));
+    registerUnlistener(win.listen('tauri://resize', notify));
     window.visualViewport?.addEventListener('resize', notify);
     return () => {
+      disposed = true;
       cancelAnimationFrame(raf);
       window.visualViewport?.removeEventListener('resize', notify);
       unlisteners.forEach(fn => fn());
@@ -162,7 +176,6 @@ function App() {
   }, []);
 
   // Check for updates once on startup; show a persistent toast if one is available.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount
   useEffect(() => {
     checkForUpdate().then(async (update) => {
       if (!update) return;
@@ -179,7 +192,7 @@ function App() {
         },
       });
     }).catch(() => { /* offline or no update endpoint configured */ });
-  }, []);
+  }, [showToast]);
 
   // Apply a queued diff once the target tab is active and its content is loaded.
   // pendingDiffTick is incremented whenever a new pending diff is enqueued so the
@@ -223,7 +236,7 @@ function App() {
     zoomIn:            () => handleZoomIn(),
     zoomOut:           () => handleZoomOut(),
     zoomReset:         () => handleZoomReset(),
-    startDebug:        () => { setSidebarOpen(true); debugCtx.startSession?.(); },
+    startDebug:        openDebugPanel,
     stopDebug:         () => debugCtx.stopSession(),
     stepOver:          () => debugCtx.stepOver?.(),
     stepInto:          () => debugCtx.stepIn?.(),
@@ -358,7 +371,7 @@ function App() {
     onKillTerminal: () => terminalRef.current?.killActive(),
     onAbout: handleAbout,
     onStartDebugging: () => {
-      setSidebarOpen(true);
+      openDebugPanel();
     },
     onStopDebugging: () => debugCtx.stopSession(),
     isDebugActive: debugCtx.session.status !== 'idle' && debugCtx.session.status !== 'terminated',
@@ -376,7 +389,12 @@ function App() {
       ) : (
         <>
           <div className="flex flex-1 overflow-hidden">
-            {sidebarOpen && <Sidebar onFileOpen={openTab} onFileOpenAtLine={openTabAtLine} fileTreeKey={fileTreeVersion} />}
+            {sidebarOpen && <Sidebar
+              onFileOpen={openTab}
+              onFileOpenAtLine={openTabAtLine}
+              fileTreeKey={fileTreeVersion}
+              debugPanelRequest={debugPanelRequest}
+            />}
             <div className="flex flex-1 overflow-hidden">
               <div className="flex-1 flex flex-col overflow-hidden">
                 <TabBar
