@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- exports the useToast hook alongside the provider component */
-import { createContext, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XCircle } from 'lucide-react';
 
@@ -44,22 +44,28 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toast, setToast] = useState<ToastState | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function showToast(text: string, type: ToastType = 'info', action?: ToastAction) {
+  const showToast = useCallback((text: string, type: ToastType = 'info', action?: ToastAction) => {
     if (timer.current) clearTimeout(timer.current);
     setToast({ text, type, action });
     // Action toasts stay until the user clicks the action or dismisses manually
     if (!action) {
       timer.current = setTimeout(() => setToast(null), AUTO_DISMISS_MS);
     }
-  }
+  }, []);
 
-  function dismiss() {
+  const dismiss = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
     setToast(null);
-  }
+  }, []);
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  const contextValue = useMemo(() => ({ showToast }), [showToast]);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       {toast && createPortal(
         <div

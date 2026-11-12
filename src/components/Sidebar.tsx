@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import ActivityBar from "./ActivityBar";
 import FileTree from "./FileTree";
 import SearchPanel from "./SearchPanel";
@@ -13,6 +13,7 @@ interface Props {
   onFileOpen: (path: string) => void;
   onFileOpenAtLine: (path: string, line: number, col: number) => void;
   fileTreeKey?: number;
+  debugPanelRequest?: number;
 }
 
 function PanelPlaceholder({ label }: { label: string }) {
@@ -39,10 +40,17 @@ function ActivePanel({ id, onFileOpen, onFileOpenAtLine, fileTreeKey }: {
   }
 }
 
-export default function Sidebar({ onFileOpen, onFileOpenAtLine, fileTreeKey }: Props) {
+export default function Sidebar({ onFileOpen, onFileOpenAtLine, fileTreeKey, debugPanelRequest = 0 }: Props) {
   const [width, setWidth] = useState(DEFAULT_WIDTH);
-  const [active, setActive] = useState("explorer");
+  const [active, setActive] = useState(debugPanelRequest > 0 ? "debug" : "explorer");
+  const previousDebugPanelRequest = useRef(debugPanelRequest);
   const isResizing = useRef(false);
+
+  useEffect(() => {
+    if (previousDebugPanelRequest.current === debugPanelRequest) return;
+    previousDebugPanelRequest.current = debugPanelRequest;
+    setActive("debug");
+  }, [debugPanelRequest]);
 
   const startResize = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

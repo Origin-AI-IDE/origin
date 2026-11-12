@@ -33,9 +33,6 @@ jobs:
   rust:
     name: Rust
     runs-on: ubuntu-latest
-    # patch-engine is a path dep at ../../tools/patch-engine, outside this repo root.
-    # Move it into the repo (or publish to crates.io) then remove continue-on-error.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

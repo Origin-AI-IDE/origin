@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCommandKeyMap, matchesEvent } from "../lib/keybindings";
 
@@ -27,7 +27,9 @@ export interface GlobalHandlers {
 export function useGlobalKeybindings(handlers: GlobalHandlers) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const h = useRef(handlers);
-  h.current = handlers;
+  useLayoutEffect(() => {
+    h.current = handlers;
+  }, [handlers]);
 
   const isFullscreenRef = useRef(false);
   const wasMaximizedRef = useRef(false);
