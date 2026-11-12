@@ -6,6 +6,7 @@ import { PROVIDERS } from "../ai/providers";
 import { loadApiKey, saveApiKey, deleteApiKey } from "../../lib/secrets";
 import { useTheme } from "../../themes/ThemeContext";
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_ASK_PROMPT, DEFAULT_PLAN_PROMPT } from "../../lib/ai";
+import { loadCustomApiConfig, saveCustomApiConfig, type CustomApiConfig } from "../../lib/agent/customApi";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,9 @@ type KeyState = {
 function AIProvidersSection() {
   const { theme } = useTheme();
   const isDark = theme.type === "dark";
+  const [customConfig, setCustomConfig] = useState<CustomApiConfig>(loadCustomApiConfig);
+  const [customConfigSaved, setCustomConfigSaved] = useState(false);
+  const [customConfigError, setCustomConfigError] = useState("");
   const [keys, setKeys] = useState<Record<string, KeyState>>(() =>
     Object.fromEntries(
       API_PROVIDERS.map(p => [p.id, { value: "", original: "", visible: false, saving: false, justSaved: false }])
@@ -112,11 +116,94 @@ function AIProvidersSection() {
     update(id, { value: "", original: "" });
   }
 
+  function handleSaveCustomConfig() {
+    setCustomConfigError("");
+    setCustomConfigSaved(false);
+    const baseUrl = customConfig.baseUrl.trim();
+    const model = customConfig.model.trim();
+    if (!baseUrl || !model) {
+      setCustomConfigError("Enter both a base URL and model.");
+      return;
+    }
+    try {
+      const parsed = new URL(baseUrl);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error("Use an http:// or https:// base URL.");
+      }
+      const next = { ...customConfig, baseUrl: baseUrl.replace(/\/+$/, ""), model };
+      saveCustomApiConfig(next);
+      setCustomConfig(next);
+      setCustomConfigSaved(true);
+      setTimeout(() => setCustomConfigSaved(false), 1800);
+    } catch (error) {
+      setCustomConfigError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   return (
     <div style={{ padding: "2px 0 16px" }}>
       <p style={{ fontSize: "12px", color: "var(--origin-fg-muted)", marginBottom: "18px", lineHeight: 1.5 }}>
-        API keys are stored in your OS keychain and never leave your device.
+        API keys are stored in your OS keychain and sent only to the selected provider when making requests.
       </p>
+
+      <div style={{
+        marginBottom: "14px", padding: "12px",
+        borderRadius: "8px", border: "1px solid var(--origin-border-default)",
+        backgroundColor: "var(--origin-bg-base)",
+      }}>
+        <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--origin-fg-default)", marginBottom: "3px" }}>
+          Custom OpenAI-Compatible API
+        </div>
+        <div style={{ fontSize: "11px", color: "var(--origin-fg-muted)", marginBottom: "10px" }}>
+          Base URL may include a version path such as /v1. The endpoint path is added automatically.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+          <input
+            aria-label="Custom API base URL"
+            type="url"
+            value={customConfig.baseUrl}
+            placeholder="https://api.example.com/v1"
+            onChange={e => setCustomConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
+            style={customInputStyle}
+          />
+          <input
+            aria-label="Custom API model"
+            value={customConfig.model}
+            placeholder="Model ID"
+            onChange={e => setCustomConfig(prev => ({ ...prev, model: e.target.value }))}
+            style={customInputStyle}
+          />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <select
+            aria-label="Custom API format"
+            value={customConfig.format}
+            onChange={e => setCustomConfig(prev => ({
+              ...prev,
+              format: e.target.value === "responses" ? "responses" : "chat-completions",
+            }))}
+            style={{ ...customInputStyle, width: 190 }}
+          >
+            <option value="chat-completions">Chat Completions API</option>
+            <option value="responses">Responses API</option>
+          </select>
+          <button
+            onClick={handleSaveCustomConfig}
+            style={{
+              padding: "5px 12px", borderRadius: "6px",
+              border: "1px solid var(--origin-border-default)",
+              backgroundColor: customConfigSaved ? "color-mix(in srgb, var(--origin-semantic-success) 15%, transparent)" : "var(--origin-fg-default)",
+              color: customConfigSaved ? "var(--origin-semantic-success)" : "var(--origin-bg-base)",
+              fontSize: "12px", fontWeight: 500, cursor: "pointer", minWidth: 58,
+            }}
+          >{customConfigSaved ? "Saved!" : "Save"}</button>
+          {customConfigError && (
+            <span role="alert" style={{ fontSize: "11px", color: "var(--origin-semantic-error)" }}>
+              {customConfigError}
+            </span>
+          )}
+        </div>
+      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
         {API_PROVIDERS.map(provider => {
@@ -277,6 +364,13 @@ function AIProvidersSection() {
     </div>
   );
 }
+
+const customInputStyle: React.CSSProperties = {
+  width: "100%", boxSizing: "border-box", padding: "6px 9px",
+  borderRadius: "6px", border: "1px solid var(--origin-border-default)",
+  backgroundColor: "var(--origin-bg-sidebar)", color: "var(--origin-fg-default)",
+  fontSize: "12px", outline: "none",
+};
 
 // ── Appearance Section ───────────────────────────────────────────────────────
 

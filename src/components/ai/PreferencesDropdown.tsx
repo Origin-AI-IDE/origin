@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, Search } from "lucide-react";
-import { PROVIDERS } from "./providers";
+import { PROVIDERS, type AIProvider } from "./providers";
 import { useTheme } from "../../themes/ThemeContext";
+import { customApiModel, loadCustomApiConfig } from "../../lib/agent/customApi";
 
 type Effort = "normal" | "max";
 
 interface Props {
   anchorEl: HTMLElement | null;
   selectedModelId: string;
+  selectedProviderId: string;
   effort: Effort;
   onSelect: (providerId: string, modelId: string) => void;
   onEffortChange: (effort: Effort) => void;
@@ -18,6 +20,13 @@ interface Props {
 const MAIN_WIDTH  = 240;
 const SUB_WIDTH   = 310;
 const SUB_HEIGHT  = 260;
+
+function getModelProviders(): AIProvider[] {
+  const customModels = customApiModel(loadCustomApiConfig());
+  return PROVIDERS.map(provider =>
+    provider.id === "custom" ? { ...provider, models: customModels } : provider
+  );
+}
 
 // ── Toggle switch ─────────────────────────────────────────────────────────────
 
@@ -81,17 +90,20 @@ function ProgressiveBlur({ direction, size = 36 }: { direction: "top" | "bottom"
 const ModelSubmenu = forwardRef<HTMLDivElement, {
   pos: { top: number; left: number };
   selectedModelId: string;
+  selectedProviderId: string;
   onSelect: (providerId: string, modelId: string) => void;
   onClose: () => void;
-}>(function ModelSubmenu({ pos, selectedModelId, onSelect, onClose }, ref) {
+}>(function ModelSubmenu({ pos, selectedModelId, selectedProviderId, onSelect, onClose }, ref) {
   const { theme } = useTheme();
   const isDark = theme.type === "dark";
   const searchRef = useRef<HTMLInputElement>(null);
   const providerScrollRef = useRef<HTMLDivElement>(null);
+  const providers = getModelProviders();
   const [canScrollUp, setCanScrollUp] = useState(false);
   const [canScrollDown, setCanScrollDown] = useState(false);
   const [activeProviderId, setActiveProviderId] = useState(() => {
-    const p = PROVIDERS.find(p => p.models.some(m => m.id === selectedModelId));
+    if (getModelProviders().some(p => p.id === selectedProviderId)) return selectedProviderId;
+    const p = getModelProviders().find(p => p.models.some(m => m.id === selectedModelId));
     return p?.id ?? PROVIDERS[0].id;
   });
   const [search, setSearch] = useState("");
@@ -113,7 +125,7 @@ const ModelSubmenu = forwardRef<HTMLDivElement, {
 
   useEffect(() => { setTimeout(() => searchRef.current?.focus(), 50); }, []);
 
-  const activeProvider = PROVIDERS.find(p => p.id === activeProviderId)!;
+  const activeProvider = providers.find(p => p.id === activeProviderId)!;
   const filteredModels = activeProvider.models.filter(m =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
     m.description.toLowerCase().includes(search.toLowerCase())
@@ -138,7 +150,7 @@ const ModelSubmenu = forwardRef<HTMLDivElement, {
           ref={providerScrollRef}
           style={{ position: "absolute", inset: 0, overflowY: "auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 0", gap: 2, scrollbarWidth: "none" }}
         >
-          {PROVIDERS.map(p => {
+          {providers.map(p => {
             const isActive = activeProviderId === p.id;
             return (
               <button
@@ -181,10 +193,12 @@ const ModelSubmenu = forwardRef<HTMLDivElement, {
         <div style={{ flex: 1, overflowY: "auto", padding: "0 4px 4px" }}>
           {filteredModels.length === 0 ? (
             <div style={{ padding: "16px 8px", fontSize: 12, color: "var(--origin-fg-subtle)", textAlign: "center" }}>
-              {activeProvider.models.length === 0 ? "Models are detected automatically." : "No models found."}
+              {activeProvider.id === "custom"
+                ? "Configure a model in Settings → AI Providers."
+                : activeProvider.models.length === 0 ? "Models are detected automatically." : "No models found."}
             </div>
           ) : filteredModels.map(m => {
-            const isSelected = m.id === selectedModelId;
+            const isSelected = activeProvider.id === selectedProviderId && m.id === selectedModelId;
             return (
               <button
                 key={m.id}
@@ -215,7 +229,7 @@ const ModelSubmenu = forwardRef<HTMLDivElement, {
 
 // ── Main dropdown ─────────────────────────────────────────────────────────────
 
-export default function PreferencesDropdown({ anchorEl, selectedModelId, effort, onSelect, onEffortChange, onClose }: Props) {
+export default function PreferencesDropdown({ anchorEl, selectedModelId, selectedProviderId, effort, onSelect, onEffortChange, onClose }: Props) {
   const menuRef    = useRef<HTMLDivElement>(null);
   const subMenuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -250,7 +264,9 @@ export default function PreferencesDropdown({ anchorEl, selectedModelId, effort,
   };
 
   // Find active model display info
-  const activeProvider = PROVIDERS.find(p => p.models.some(m => m.id === selectedModelId));
+  const modelProviders = getModelProviders();
+  const activeProvider = modelProviders.find(p => p.id === selectedProviderId)
+    ?? modelProviders.find(p => p.models.some(m => m.id === selectedModelId));
   const activeModel    = activeProvider?.models.find(m => m.id === selectedModelId);
 
   if (!anchorEl) return null;
@@ -305,6 +321,7 @@ export default function PreferencesDropdown({ anchorEl, selectedModelId, effort,
           ref={subMenuRef}
           pos={subPos}
           selectedModelId={selectedModelId}
+          selectedProviderId={selectedProviderId}
           onSelect={onSelect}
           onClose={onClose}
         />

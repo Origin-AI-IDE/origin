@@ -103,6 +103,7 @@ pub fn run() {
         .manage(terminal::TerminalState::new())
         .manage(lsp::LspState::new())
         .manage(dap::DapState::new())
+        .manage(ai::AiProxyState::default())
         .invoke_handler(tauri::generate_handler![
             keychain::set_secret,
             keychain::get_secret,
@@ -134,6 +135,8 @@ pub fn run() {
             tree::get_import_edges,
             ai::agent_bash_run,
             ai::ai_stream_proxy,
+            ai::cancel_ai_stream_proxy,
+            ai::register_custom_api_endpoint,
             ai::fetch_text,
             lsp::lsp_start,
             lsp::lsp_request,

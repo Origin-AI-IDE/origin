@@ -181,4 +181,14 @@ export const PROVIDERS: AIProvider[] = [
     textColor: '#ffffff',
     models: [],
   },
+  {
+    id: 'custom',
+    name: 'Custom API',
+    initial: 'API',
+    icon: null,
+    invert: false,
+    color: '#8b5cf6',
+    textColor: '#ffffff',
+    models: [],
+  },
 ];

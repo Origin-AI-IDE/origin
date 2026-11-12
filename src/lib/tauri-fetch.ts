@@ -16,6 +16,8 @@ export async function tauriFetch(
     : (input as Request).url;
 
   const method = init?.method ?? (init?.body ? "POST" : "GET");
+  const requestId = crypto.randomUUID();
+  const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
 
   const headers: Record<string, string> = {};
   if (init?.headers) {
@@ -43,10 +45,43 @@ export async function tauriFetch(
 
   return new Promise<Response>((resolve, reject) => {
     let resolved = false;
+    let streamTerminated = false;
+    let proxyReady = false;
+    let abortRequested = false;
     let ctrl: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const cleanup = () => signal?.removeEventListener("abort", onAbort);
+    const failStream = (error: unknown) => {
+      if (!streamTerminated) {
+        streamTerminated = true;
+        ctrl?.error(error);
+      }
+    };
+    const cancelProxy = () => {
+      abortRequested = true;
+      if (proxyReady) {
+        void invoke("cancel_ai_stream_proxy", { requestId }).catch(console.error);
+      }
+    };
+    const onAbort = () => {
+      cancelProxy();
+      const error = new DOMException("The operation was aborted", "AbortError");
+      if (!resolved) {
+        resolved = true;
+        streamTerminated = true;
+        cleanup();
+        reject(error);
+      } else {
+        failStream(error);
+      }
+    };
 
     const stream = new ReadableStream<Uint8Array>({
       start(c) { ctrl = c; },
+      cancel() {
+        streamTerminated = true;
+        cleanup();
+        cancelProxy();
+      },
     });
 
     const channel = new Channel<ProxyEvent>();
@@ -62,22 +97,56 @@ export async function tauriFetch(
           break;
         }
         case "chunk":
-          ctrl?.enqueue(new Uint8Array(event.bytes));
+          if (!streamTerminated) ctrl?.enqueue(new Uint8Array(event.bytes));
           break;
         case "done":
-          ctrl?.close();
+          cleanup();
+          if (!streamTerminated) {
+            streamTerminated = true;
+            ctrl?.close();
+          }
           break;
         case "error":
-          if (!resolved) { resolved = true; reject(new Error(event.message)); }
-          else ctrl?.error(new Error(event.message));
+          cleanup();
+          if (!resolved) {
+            resolved = true;
+            streamTerminated = true;
+            reject(new Error(event.message));
+          }
+          else failStream(new Error(event.message));
           break;
       }
     };
 
-    invoke("ai_stream_proxy", { url, method, headers, body, channel })
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    invoke("ai_stream_proxy", { url, method, headers, body, requestId, channel })
+      .then(() => {
+        proxyReady = true;
+        if (abortRequested) {
+          void invoke("cancel_ai_stream_proxy", { requestId }).catch(console.error);
+        }
+      })
       .catch((e: unknown) => {
-        if (!resolved) { resolved = true; reject(e instanceof Error ? e : new Error(String(e))); }
-        else ctrl?.error(e);
+        cleanup();
+        if (!resolved) {
+          resolved = true;
+          streamTerminated = true;
+          reject(e instanceof Error ? e : new Error(String(e)));
+        }
+        else failStream(e);
       });
   });
+}
+
+export function customApiFetch(baseUrl: string): typeof tauriFetch {
+  let registration: Promise<void> | undefined;
+  return (input, init) => {
+    registration ??= invoke<void>("register_custom_api_endpoint", { baseUrl });
+    return registration.then(() => tauriFetch(input, init));
+  };
 }

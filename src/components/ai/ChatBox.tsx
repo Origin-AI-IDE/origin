@@ -549,6 +549,7 @@ export default function ChatBox({ onSend, getEditorContext, forcedContext, onFor
             // eslint-disable-next-line react-hooks/refs -- anchorEl portal pattern: positions dropdown relative to the anchor button
             anchorEl={prefsAnchorRef.current}
             selectedModelId={selectedModelId}
+            selectedProviderId={selectedProviderId}
             effort={effort}
             onSelect={(providerId, modelId) => {
               setSelectedModelId(modelId);
