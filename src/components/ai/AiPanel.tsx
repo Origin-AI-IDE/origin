@@ -21,6 +21,7 @@ import { recordUsage } from "../../lib/usage";
 import { loadApiKey } from "../../lib/secrets";
 import { readFile } from "../../lib/fs";
 import { buildLanguageModel } from "../../lib/agent/providers";
+import { loadCustomApiConfig } from "../../lib/agent/customApi";
 import { createTools, createReadOnlyTools, createAskTools } from "../../lib/agent/tools";
 import { runAgent, type AgentEvent } from "../../lib/agent/run";
 import { parsePlan } from "../../lib/agent/planTypes";
@@ -291,6 +292,7 @@ const CTX_MIN     = 160;
 const CTX_MAX     = 480;
 const CTX_DEFAULT = 200;
 const LOCAL_PROVIDERS = new Set(["ollama", "lmstudio", "vllm"]);
+const NO_KEY_PROVIDERS = new Set([...LOCAL_PROVIDERS, "custom"]);
 
 // ── AiPanel ────────────────────────────────────────────────────────────────────
 
@@ -545,7 +547,7 @@ export default function AiPanel({
       : (getActiveFilePathRef.current?.() ?? undefined);
 
     const apiKey = await loadApiKey(provider.id);
-    if (!apiKey && !LOCAL_PROVIDERS.has(provider.id)) {
+    if (!apiKey && !NO_KEY_PROVIDERS.has(provider.id)) {
       setMessages(prev => [
         ...prev,
         { role: "user" as const, content: text, sourceFilePath, fileMentions: fileMentions.length > 0 ? fileMentions : undefined, editorContext: editorContext ?? undefined },
@@ -830,7 +832,8 @@ export default function AiPanel({
 
     let model;
     try {
-      model = buildLanguageModel(providerId, modelId, apiKey ?? "");
+      const customApi = providerId === "custom" ? loadCustomApiConfig() : undefined;
+      model = buildLanguageModel(providerId, modelId, apiKey ?? "", customApi);
     } catch (e) {
       showToast(`Provider error: ${e instanceof Error ? e.message : String(e)}`, "error");
       setMessages(prev => {
